@@ -1,0 +1,37 @@
+<%
+  const textos = {
+    'no-existe': { titulo: 'Este enlace no existe', color: 'var(--tercero)', icono: 'i-cruz', tinta: '#fff' },
+    pausa: { titulo: 'Este enlace está en pausa', color: 'var(--acento)', icono: 'i-pausa', tinta: 'var(--oscuro)' },
+    caducado: { titulo: 'Este enlace ya no está disponible', color: 'var(--principal)', icono: 'i-reloj', tinta: '#fff' },
+  };
+  const t = textos[r.tipo];
+%>
+<%- include('parciales/cabeza', { titulo: t.titulo }) %>
+<main class="nf">
+  <div class="nf-marca"><img src="/marca/isotipo.svg" alt=""><%= centro.nombre %></div>
+  <div class="nf-caja">
+    <div class="nf-ilustracion" aria-hidden="true">
+      <div class="fondo"></div>
+      <img src="/marca/isotipo.svg" alt="">
+      <div class="sello" style="background:<%= t.color %>;color:<%= t.tinta %>"><svg class="i"><use href="#<%= t.icono %>"/></svg></div>
+    </div>
+    <h1><%= t.titulo %></h1>
+    <% if (r.tipo === 'no-existe' && r.nombre) { %>
+      <p>No hay ningún enlace llamado <b><%= dominio %>/<wbr><%= r.nombre %></b>. Revisa que esté bien escrito.</p>
+      <% if (r.parecido) { %>
+        <a class="sugerencia" href="/<%= encodeURIComponent(r.parecido) %>"><small>¿Querías decir…?</small><%= dominio %>/<%= r.parecido %></a>
+      <% } %>
+    <% } else if (r.tipo === 'no-existe') { %>
+      <p>Esta dirección no lleva a ningún sitio.</p>
+    <% } else if (r.tipo === 'pausa') { %>
+      <p>Quien lo creó lo ha desactivado por ahora. Si lo necesitas, pregunta al profesor que te lo dio.</p>
+    <% } else { %>
+      <p>Estuvo activo hasta el <%= fechaLarga(r.caduca) %>. Puede que haya uno nuevo: búscalo en la web del centro.</p>
+    <% } %>
+    <% if (centro.web) { %><a class="btn" href="<%= centro.web %>">Ir a la web del centro</a><% } %>
+    <% if (centro.aulaVirtual) { %><a class="btn fantasma" href="<%= centro.aulaVirtual %>">Ir al aula virtual</a><% } %>
+  </div>
+  <div class="nf-pie"><%= centro.pie %></div>
+</main>
+</body>
+</html>

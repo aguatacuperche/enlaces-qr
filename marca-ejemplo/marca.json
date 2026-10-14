@@ -1,0 +1,9 @@
+{
+  "colores": {
+    "principal": { "nombre": "Azul", "valor": "#2453a6" },
+    "segundo": { "nombre": "Verde", "valor": "#1f7a45" },
+    "tercero": { "nombre": "Rojo", "valor": "#c22f3a" },
+    "acento": { "nombre": "Amarillo", "valor": "#f2b632" },
+    "oscuro": { "nombre": "Negro", "valor": "#1d1d1f" }
+  }
+}

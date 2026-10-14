@@ -1,0 +1,49 @@
+name: sin-firma-ia
+
+# Segundo cerrojo de la norma «sin firma de IA» (ver .githooks/commit-msg): revisa los
+# commits nuevos de cada PR o push y el texto de la PR.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  firma:
+    name: Sin firma de IA
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Commits y texto de la PR
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          patron='(<noreply@anthropic\.com>|^Claude-Session:|^Co-Authored-By:.*\bClaude\b|Generated with \[|claude\.ai/code/)'
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            rango="$HEAD_SHA -1"
+          else
+            rango="$BASE..$HEAD_SHA"
+          fi
+          fallo=0
+          for c in $(git rev-list $rango); do
+            if git log -1 --format=%B "$c" | grep -nEi "$patron"; then
+              echo "::error::El commit $c lleva firma de IA"
+              fallo=1
+            fi
+          done
+          if printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | grep -nEi "$patron"; then
+            echo "::error::El texto de la PR lleva firma de IA"
+            fallo=1
+          fi
+          exit $fallo

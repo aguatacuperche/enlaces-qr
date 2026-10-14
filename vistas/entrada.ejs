@@ -1,0 +1,38 @@
+<%- include('parciales/cabeza', { titulo: 'Entrar' }) %>
+<main class="entrada">
+  <div class="entrada-lado">
+    <img class="logo" src="/marca/logo.svg" alt="<%= centro.nombre %>">
+    <h1>Enlaces cortos y <em>códigos QR</em></h1>
+    <p>Para las circulares, los carteles y el aula virtual.</p>
+    <% if (rechazo) { %>
+      <div class="aviso mal" role="alert">
+        <% if (rechazo.motivo === 'excluido') { %>
+          <b>Esta cuenta no tiene acceso</b><%= dominio %> es solo para los profesores del centro. Has entrado con <strong><%= rechazo.correo %></strong>.
+        <% } else if (rechazo.motivo === 'otro-dominio') { %>
+          <b>Esa cuenta no es del centro</b>Entra con tu cuenta @<%= dominioCorreo %><% if (rechazo.correo) { %>, no con <strong><%= rechazo.correo %></strong><% } %>.
+        <% } else if (rechazo.motivo === 'sin-verificar') { %>
+          <b>Google no ha confirmado tu correo</b>Prueba otra vez o entra con otra cuenta.
+        <% } else { %>
+          <b>No se ha podido entrar</b>Ha fallado la conexión con Google. Prueba otra vez dentro de un momento.
+        <% } %>
+      </div>
+    <% } %>
+    <% if (!entradaDePrueba) { %>
+      <a class="btn" href="/entrar"><svg class="i"><use href="#i-escuela"/></svg><%= rechazo ? 'Entrar con otra cuenta' : 'Entrar con la cuenta del centro' %></a>
+      <div class="ayuda">Con tu cuenta de Google @<%= dominioCorreo %>. No hay contraseñas propias.</div>
+    <% } else { %>
+      <div class="prueba">
+        <b>Entrada de prueba (solo en desarrollo)</b>: escribe un correo inventado.
+        <form method="post" action="/entrar/prueba">
+          <input name="correo" type="email" required placeholder="ana.perez@<%= dominioCorreo %>" aria-label="Correo">
+          <input name="nombre" placeholder="Nombre (opcional)" aria-label="Nombre">
+          <button class="btn peq">Entrar</button>
+        </form>
+      </div>
+    <% } %>
+  </div>
+  <div class="entrada-arte" aria-hidden="true"><img src="/marca/qr.svg" alt=""></div>
+  <footer class="pie"><span><%= centro.pie %></span><span><%= dominio %></span></footer>
+</main>
+</body>
+</html>

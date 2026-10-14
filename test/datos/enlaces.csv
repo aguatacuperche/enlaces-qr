@@ -1,0 +1,16 @@
+id,slug,destiny,name,visits,enable,user_id,inserted_at,updated_at
+10,notas,https://notas.example.com,Notas,5120,t,1,2021-02-09 13:55:08,2022-11-21 14:05:59
+11,Qx7b,"https://maps.example.com/@10.5,-20.1,3a",Visita virtual,31,t,2,2021-02-09 13:55:08,2021-02-09 13:55:08
+12,otoño,https://drive.example.com/audio,Audio,19,t,2,2022-11-29 20:06:21,2022-11-29 20:06:21
+13,+DATOS,https://drive.example.com/tarifas,Tarifas,64,t,1,2025-11-25 11:55:10,2025-11-25 11:55:10
+20,evaluacion,https://evaluacion.example.com/2023,Pruebas 2023,512,t,1,2023-05-22 06:56:54,2023-05-26 11:54:32
+21,evaluacion,https://evaluacion.example.com/2024,Pruebas 2024,0,t,1,2024-05-20 06:59:33,2024-05-20 06:59:33
+30,Inscripcion,https://forms.example.com/ficha,Inscripción,3,t,2,2024-07-01 09:17:56,2024-07-01 09:17:56
+31,inscripcion,https://forms.example.com/ficha,Inscripción,97,t,2,2024-07-01 09:17:56,2024-07-01 09:17:56
+40,WQTR,https://video.example.com/a,De alumno,0,t,3,2023-02-15 08:55:29,2023-02-15 08:55:29
+41,WQTR,https://video.example.com/b,De alumno,0,f,3,2023-03-13 08:46:47,2023-03-13 08:46:47
+42,ZMBK,https://video.example.com/c,De otro alumno,5,t,4,2023-03-20 08:35:23,2023-03-20 08:35:23
+50,https://video.example.com/x,https://video.example.com/x,Nombre imposible,0,t,1,2023-03-13 08:42:10,2023-03-13 08:42:10
+51,roto,no-es-una-direccion,Destino roto,0,t,1,2023-03-13 08:42:10,2023-03-13 08:42:10
+52,pausado,https://example.com/pausa,En pausa,3,f,1,2023-03-13 08:42:10,2023-03-13 08:42:10
+53,huerfano,https://example.com/h,Sin dueño en la exportación,1,t,99,2023-03-13 08:42:10,2023-03-13 08:42:10

@@ -1,0 +1,48 @@
+<%- include('parciales/cabeza', { titulo: 'Usuarios' }) %>
+<%- include('parciales/barra', { seccion: 'usuarios' }) %>
+<main class="cuerpo">
+  <h1>Usuarios</h1>
+  <% if (hecho !== undefined) { %><p class="aviso bien" role="status"><%= hecho === '1' ? 'Se ha pasado 1 enlace.' : `Se han pasado ${hecho} enlaces.` %></p><% } %>
+  <p style="color:var(--tinta-2);margin-top:0">Se dan de alta solos la primera vez que entran con su cuenta del centro. Las cuentas excluidas (las de los alumnos, por ejemplo) no pueden entrar.</p>
+
+  <section class="tarjeta" style="margin-bottom:18px">
+    <form class="pasar" method="post" action="/panel/usuarios/pasar">
+      <b>Pasar todos los enlaces de</b>
+      <select name="de" aria-label="De">
+        <option value="sin">Sin dueño (<%= sinDueno %>)</option>
+        <% for (const u of usuarios) { if (u.enlaces) { %><option value="<%= u.id %>"><%= u.nombre %> (<%= u.enlaces %>)</option><% } } %>
+      </select>
+      <b>a</b>
+      <select name="a" aria-label="A">
+        <% for (const u of usuarios) { %><option value="<%= u.id %>"><%= u.nombre %></option><% } %>
+      </select>
+      <button class="btn suave peq">Pasar</button>
+    </form>
+    <p class="nota">Para cuando un profesor se va del centro: sus enlaces siguen funcionando y pasan a otro.</p>
+  </section>
+
+  <table class="lista usuarios">
+    <thead><tr><th>Nombre</th><th>Correo</th><th>Enlaces</th><th>Última entrada</th><th>Administrador</th></tr></thead>
+    <tbody>
+    <% for (const u of usuarios) { %>
+      <tr>
+        <td class="nom"><b><%= u.nombre %></b></td>
+        <td><%= u.correo %></td>
+        <td><%= u.enlaces %></td>
+        <td><%= u.ultima_entrada ? fechaCorta(u.ultima_entrada) : 'Aún no ha entrado' %></td>
+        <td>
+          <% if (u.id === usuario.id) { %>
+            <span class="chip-gris">Tú</span>
+          <% } else { %>
+          <form method="post" action="/panel/usuarios/<%= u.id %>/admin">
+            <input type="hidden" name="admin" value="<%= u.admin ? 'no' : 'si' %>">
+            <button class="estado"><span class="interruptor <%= u.admin ? 'si' : '' %>"></span><%= u.admin ? 'Sí' : 'No' %></button>
+          </form>
+          <% } %>
+        </td>
+      </tr>
+    <% } %>
+    </tbody>
+  </table>
+</main>
+<%- include('parciales/pie') %>

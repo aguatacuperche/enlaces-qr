@@ -1,0 +1,14 @@
+version: 2
+# Una PR semanal agrupada por ecosistema, solo con versiones menores y parches; las mayores se hacen a mano, probando.
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule: { interval: weekly, day: monday }
+    groups:
+      dependencias: { patterns: ["*"] }
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly, day: monday }

@@ -1,0 +1,86 @@
+<%
+  const radio = (grupo, valor, contenido) => `<label><input type="radio" name="${grupo}" value="${valor}" ${o[grupo] === valor ? 'checked' : ''}><span>${contenido}</span></label>`;
+  const base = `/panel/enlaces/${e.id}/qr`;
+  const escaparHtml = t => t.replace(/[<>&"]/g, ch => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[ch]);
+%>
+<%- include('parciales/cabeza', { titulo: 'Código QR' }) %>
+<%- include('parciales/barra', { seccion: usuario.id === e.usuario_id ? 'mios' : 'todos' }) %>
+<main class="cuerpo">
+  <div class="miga"><a href="/panel/enlaces/<%= e.id %>"><svg class="i"><use href="#i-volver"/></svg><%= e.titulo %></a><span>/</span><b>Código QR de <%= corta(e.nombre) %></b></div>
+  <form class="creador" id="creador" method="get" action="<%= base %>" data-base="<%= base %>">
+    <div class="opciones">
+      <fieldset class="grupo"><legend>Color</legend>
+        <div class="segmento">
+          <%- radio('color', 'marca', '<i class="muestra multi"></i>Del centro') %>
+          <% for (const p of ['principal', 'segundo', 'tercero', 'oscuro']) { %>
+            <%- radio('color', p, `<i class="muestra" style="background:var(--${p})"></i>${escaparHtml(colores[p].nombre)}`) %>
+          <% } %>
+        </div>
+        <p class="nota">El <%= colores.acento.nombre.toLowerCase() %> solo va en el logo: sobre blanco, un QR de ese color cuesta de leer.</p>
+      </fieldset>
+      <fieldset class="grupo"><legend>Puntos</legend>
+        <div class="segmento">
+          <%- radio('puntos', 'redondeados', '<svg viewBox="0 0 18 18"><path d="M2 2h5a2.5 2.5 0 0 1 0 5H2zM9 9h5a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2z" fill="currentColor"/></svg>Redondeados') %>
+          <%- radio('puntos', 'circulos', '<svg viewBox="0 0 18 18"><circle cx="4.5" cy="4.5" r="2.5" fill="currentColor"/><circle cx="12.5" cy="12.5" r="2.5" fill="currentColor"/><circle cx="12.5" cy="4.5" r="2.5" fill="currentColor"/></svg>Círculos') %>
+          <%- radio('puntos', 'cuadrados', '<svg viewBox="0 0 18 18"><path d="M2 2h5v5H2zM10 10h6v6h-6zM10 2h5v5h-5z" fill="currentColor"/></svg>Cuadrados') %>
+        </div>
+      </fieldset>
+      <fieldset class="grupo"><legend>Esquinas</legend>
+        <div class="segmento">
+          <%- radio('esquinas', 'redondeadas', '<svg viewBox="0 0 18 18"><rect x="2" y="2" width="14" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="6.5" y="6.5" width="5" height="5" rx="1.5" fill="currentColor"/></svg>Redondeadas') %>
+          <%- radio('esquinas', 'circulo', '<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="9" cy="9" r="2.8" fill="currentColor"/></svg>Círculo') %>
+          <%- radio('esquinas', 'cuadradas', '<svg viewBox="0 0 18 18"><rect x="2" y="2" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="6.5" y="6.5" width="5" height="5" fill="currentColor"/></svg>Cuadradas') %>
+        </div>
+      </fieldset>
+      <fieldset class="grupo"><legend>En el centro</legend>
+        <div class="segmento">
+          <%- radio('centro', 'logo', '<img src="/marca/isotipo.svg" alt="">El logo del centro') %>
+          <%- radio('centro', 'nada', 'Nada') %>
+        </div>
+      </fieldset>
+      <fieldset class="grupo"><legend>Marco</legend>
+        <div class="segmento">
+          <%- radio('marco', 'escaneame', '«Escanéame»') %>
+          <%- radio('marco', 'nombre', 'Nombre del enlace') %>
+          <%- radio('marco', 'libre', 'Texto propio') %>
+          <%- radio('marco', 'no', 'Sin marco') %>
+        </div>
+        <div class="campo texto-libre" <%= o.marco === 'libre' ? '' : 'hidden' %> id="texto-libre"><input name="texto" value="<%= o.texto %>" maxlength="28" placeholder="Por ejemplo: Autorización excursión" aria-label="Texto del marco"></div>
+      </fieldset>
+      <fieldset class="grupo"><legend>Fondo</legend>
+        <div class="segmento">
+          <%- radio('fondo', 'blanco', 'Blanco') %>
+          <%- radio('fondo', 'transparente', 'Transparente') %>
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="vista">
+      <div class="vista-cab">
+        <b>Vista previa</b>
+        <span class="lectura" id="lectura" aria-live="polite"><svg class="i"><use href="#i-ok"/></svg>Comprobando…</span>
+      </div>
+      <div class="lienzo <%= o.fondo === 'transparente' ? 'cuadros' : '' %>" id="lienzo">
+        <img id="vista-previa" src="<%= base %>.svg?<%= consulta(o) %>" alt="Vista previa del código QR de <%= corta(e.nombre) %>">
+      </div>
+      <fieldset class="grupo" style="padding:0;border:0"><legend class="oculto">Tamaño</legend>
+        <div class="tamanos">
+          <% for (const [clave, t] of Object.entries(tamanos)) { %>
+            <label><input type="radio" name="tamano" value="<%= clave %>" <%= o.tamano === clave ? 'checked' : '' %>><span><b><%= t.nombre %></b><small><%= t.cm ? `${t.cm} × ${t.cm} cm` : `${t.px} px` %></small></span></label>
+          <% } %>
+        </div>
+      </fieldset>
+      <div class="descargas">
+        <a class="btn" data-formato="png" href="<%= base %>.png?<%= consulta(o) %>&amp;descargar=1"><svg class="i"><use href="#i-bajar"/></svg>PNG</a>
+        <a class="btn" data-formato="svg" href="<%= base %>.svg?<%= consulta(o) %>&amp;descargar=1"><svg class="i"><use href="#i-bajar"/></svg>SVG</a>
+        <a class="btn" data-formato="pdf" href="<%= base %>.pdf?<%= consulta(o) %>&amp;descargar=1"><svg class="i"><use href="#i-bajar"/></svg>PDF</a>
+        <button type="button" class="btn suave" id="copiar-imagen"><svg class="i"><use href="#i-imagen"/></svg>Copiar imagen</button>
+        <button type="button" class="btn suave" data-copiar="<%= urlCorta(e.nombre) %>"><svg class="i"><use href="#i-copiar"/></svg>Copiar enlace</button>
+      </div>
+      <p class="nota">El PNG sale a 300 ppp para el tamaño elegido y el PDF lo coloca a su tamaño real en un folio (o un A3 para el cartel). El SVG vale para cualquier tamaño.</p>
+    </div>
+    <noscript><button class="btn">Ver la vista previa</button></noscript>
+  </form>
+</main>
+<script src="/estaticos/qr.js"></script>
+<%- include('parciales/pie') %>

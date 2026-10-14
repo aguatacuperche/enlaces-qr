@@ -1,0 +1,15 @@
+<header class="barra">
+  <a class="marca" href="/panel"><img src="/marca/isotipo.svg" alt=""><%= dominio %></a>
+  <nav aria-label="Secciones">
+    <a href="/panel" class="<%= seccion === 'mios' ? 'activo' : '' %>">Mis enlaces<% if (typeof misEnlaces === 'number') { %> <small><%= misEnlaces %></small><% } %></a>
+    <% if (usuario.admin) { %>
+      <a href="/panel/todos" class="<%= seccion === 'todos' ? 'activo' : '' %>">Todos<% if (typeof totalTodos === 'number') { %> <small><%= totalTodos %></small><% } %></a>
+      <a href="/panel/usuarios" class="<%= seccion === 'usuarios' ? 'activo' : '' %>">Usuarios</a>
+    <% } %>
+  </nav>
+  <div class="usuario">
+    <span class="avatar" aria-hidden="true"><%= usuario.nombre.split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase() %></span>
+    <span class="nombre-usuario"><%= usuario.nombre %></span>
+    <form method="post" action="/salir"><button class="ic" title="Salir" aria-label="Salir"><svg class="i"><use href="#i-salir"/></svg></button></form>
+  </div>
+</header>

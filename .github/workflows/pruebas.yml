@@ -1,0 +1,35 @@
+name: pruebas
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    name: Tipos y pruebas
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: enlaces
+          POSTGRES_PASSWORD: enlaces
+          POSTGRES_DB: enlaces_pruebas
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL_PRUEBAS: postgres://enlaces:enlaces@localhost:5432/enlaces_pruebas
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run tipos
+      - run: npm test

@@ -1,0 +1,6 @@
+id,email,name,admin,inserted_at
+1,ana.perez@colegio.example,Ana Pérez,t,2022-11-21 10:52:59
+2,Luis.Gomez@Colegio.example,Luis Gómez,f,2022-11-21 10:53:59
+3,nombre2010b@colegio.example,Alumno Inventado,f,2023-01-10 09:00:00
+4,otro08c@colegio.example,Otro Alumno,f,2023-01-10 09:00:00
+5,alguien@gmail.com,De Fuera,f,2023-01-10 09:00:00

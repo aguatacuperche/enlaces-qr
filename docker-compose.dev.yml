@@ -1,0 +1,17 @@
+# Solo para desarrollo: un PostgreSQL 17 local.
+#   docker compose -f docker-compose.dev.yml up -d
+# DATABASE_URL=postgres://enlaces:enlaces@localhost:5433/enlaces
+services:
+  bd:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: enlaces
+      POSTGRES_PASSWORD: enlaces
+      POSTGRES_DB: enlaces
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - bd-dev:/var/lib/postgresql/data
+    mem_limit: 512m
+volumes:
+  bd-dev:

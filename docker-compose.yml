@@ -1,0 +1,26 @@
+# enlaces-qr detrás de nginx-proxy con certificados automáticos.
+# Los valores reales van en .env (copia de .env.example); las dos redes tienen que existir ya.
+#   docker compose up -d --build
+services:
+  enlaces-qr:
+    build: .
+    image: enlaces-qr:1.0.0
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      VIRTUAL_PORT: "3000"
+      MARCA: /app/marca
+    volumes:
+      # La marca del centro (marca.json, logo.svg, isotipo.svg). Sin MARCA_DIR, la de ejemplo.
+      - ${MARCA_DIR:-./marca-ejemplo}:/app/marca:ro
+    mem_limit: 256m
+    networks: [proxy, bd]
+
+networks:
+  proxy:
+    external: true
+    name: ${RED_PROXY:?Falta RED_PROXY en .env (la red del proxy)}
+  bd:
+    external: true
+    name: ${RED_BD:?Falta RED_BD en .env (la red donde está PostgreSQL)}

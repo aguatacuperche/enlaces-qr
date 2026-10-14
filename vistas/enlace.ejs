@@ -1,0 +1,66 @@
+<%
+  const d = datos || { nombre: e.nombre, destino: e.destino, titulo: e.titulo, etiqueta: e.etiqueta || '', caduca: e.caduca || '', activo: e.activo ? 'si' : '' };
+  const mal = campo => error && error.campo === campo ? 'mal' : '';
+  const estado = estadoDe(e);
+%>
+<%- include('parciales/cabeza', { titulo: e.titulo }) %>
+<%- include('parciales/barra', { seccion: usuario.id === e.usuario_id ? 'mios' : 'todos' }) %>
+<main class="cuerpo">
+  <div class="miga"><a href="/panel"><svg class="i"><use href="#i-volver"/></svg>Mis enlaces</a><span>/</span><b><%= e.titulo %></b></div>
+  <% if (guardado) { %><p class="aviso bien" role="status">Guardado.</p><% } %>
+  <% if (error) { %><p class="aviso mal" role="alert"><%= error.message %></p><% } %>
+  <div class="ficha">
+    <section class="tarjeta">
+      <h2>Visitas por semana</h2>
+      <p class="sub"><%= corta(e.nombre) %> · últimas 12 semanas</p>
+      <div class="grafico" data-grafico><%- graficoSemanas(semanas) %><div class="ayuda-grafico"></div></div>
+      <dl class="datos" style="margin-top:16px">
+        <dt>En total</dt><dd><%= numero(e.visitas) %> visitas<% if (e.visitas_anteriores) { %> (<%= numero(e.visitas_anteriores) %> de la app anterior, sin fechas)<% } %></dd>
+        <dt>Últimos 30 días</dt><dd><%= numero(e.visitas_mes) %></dd>
+        <dt>Estado</dt><dd><%= { activo: 'Activo', pausa: 'En pausa', caducado: 'Caducado' }[estado] %></dd>
+        <dt>Creado</dt><dd><%= fechaCorta(e.creado) %><% if (e.dueno) { %>, de <%= e.dueno %><% } else { %>, sin dueño<% } %></dd>
+      </dl>
+      <div class="botonera" style="margin-top:16px">
+        <a class="btn" href="/panel/enlaces/<%= e.id %>/qr"><svg class="i"><use href="#i-qr"/></svg>Código QR</a>
+        <button type="button" class="btn suave" data-copiar="<%= urlCorta(e.nombre) %>"><svg class="i"><use href="#i-copiar"/></svg>Copiar enlace</button>
+        <a class="btn fantasma" href="<%= e.destino %>" target="_blank" rel="noopener noreferrer">Abrir el destino</a>
+      </div>
+    </section>
+
+    <section class="tarjeta">
+      <form class="formulario" method="post" action="/panel/enlaces/<%= e.id %>">
+        <label><span>Título</span><div class="campo"><input name="titulo" value="<%= d.titulo %>" maxlength="120"></div></label>
+        <label><span>Destino</span><div class="campo <%= mal('destino') %>"><input name="destino" type="url" required value="<%= d.destino %>"></div>
+          <small>Puedes cambiarlo cuando quieras: los carteles y QR impresos llevarán al nuevo destino.</small></label>
+        <label><span>Nombre</span><div class="campo <%= mal('nombre') %>"><span><%= dominio %>/</span><input name="nombre" required value="<%= d.nombre %>" spellcheck="false"></div>
+          <small>Si lo cambias, los carteles y QR que ya estén impresos dejarán de funcionar.</small></label>
+        <div class="dos">
+          <label><span>Etiqueta</span><div class="campo"><input name="etiqueta" value="<%= d.etiqueta %>" maxlength="30" placeholder="Familias, Comedor…"></div></label>
+          <label><span>Caduca el</span><div class="campo <%= mal('caduca') %>"><input name="caduca" type="date" value="<%= d.caduca %>"></div><small>Opcional. Después, avisa de que ya no está disponible.</small></label>
+        </div>
+        <label class="casilla"><input type="checkbox" name="activo" value="si" <%= d.activo === 'si' ? 'checked' : '' %>>Activo (si lo quitas, el enlace queda en pausa)</label>
+        <div class="botonera"><button class="btn">Guardar</button><a class="btn fantasma" href="/panel">Cancelar</a></div>
+      </form>
+
+      <% if (usuario.admin) { %>
+      <form class="formulario zona-peligro" method="post" action="/panel/enlaces/<%= e.id %>/dueno">
+        <label><span>Dueño</span>
+          <div class="pasar">
+            <select name="usuario" aria-label="Dueño">
+              <option value="">Sin dueño</option>
+              <% for (const u of usuarios) { %><option value="<%= u.id %>" <%= u.id === e.usuario_id ? 'selected' : '' %>><%= u.nombre %></option><% } %>
+            </select>
+            <button class="btn suave peq">Cambiar</button>
+          </div>
+        </label>
+      </form>
+      <% } %>
+
+      <form class="zona-peligro" method="post" action="/panel/enlaces/<%= e.id %>/borrar" data-confirmar="¿Borrar <%= corta(e.nombre) %>? Si está impreso en algún sitio, dejará de funcionar. Si solo quieres pararlo un tiempo, mejor quita «Activo».">
+        <p>Borrar es para siempre. Si solo quieres pararlo, quita «Activo».</p>
+        <button class="btn peligro peq">Borrar el enlace</button>
+      </form>
+    </section>
+  </div>
+</main>
+<%- include('parciales/pie') %>

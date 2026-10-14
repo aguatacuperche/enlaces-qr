@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# Ningún commit de este repositorio lleva firma de IA.
+# El gancho ataja la línea antes de que exista y el trabajo de CI `sin-firma-ia` revisa los commits nuevos por si
+# alguien usa --no-verify.
+#
+# Activarlo en cada clon (una vez): git config core.hooksPath .githooks
+
+mensaje="$1"
+
+# `Co-Authored-By` es legítimo para una persona: se mira el correo, no la etiqueta.
+prohibido='(<noreply@anthropic\.com>|^Claude-Session:|^Co-Authored-By:.*\bClaude\b|Generated with \[|claude\.ai/code/)'
+
+sobra=$(grep -nEi "$prohibido" "$mensaje")
+
+if [ -n "$sobra" ]; then
+	printf '\n  ✗ Este mensaje de commit lleva firma de IA, y aquí no se hace.\n\n' >&2
+	printf '%s\n' "$sobra" | sed 's/^/      /' >&2
+	printf '\n  Quita esas líneas y vuelve a hacer el commit.\n\n' >&2
+	exit 1
+fi
+exit 0
