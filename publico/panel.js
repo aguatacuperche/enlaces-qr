@@ -23,10 +23,26 @@
     }
   });
 
+  // Confirmación antes de algo que no se deshace (borrar): un diálogo de la app, no el del navegador.
+  const dialogo = document.getElementById('confirmar');
   document.addEventListener('submit', e => {
     const f = e.target.closest('[data-confirmar]');
-    if (f && !confirm(f.dataset.confirmar)) e.preventDefault();
+    if (!f) return;
+    e.preventDefault();
+    const texto = [f.dataset.confirmar, f.dataset.confirmarTexto].filter(Boolean).join(' ');
+    if (!dialogo || typeof dialogo.showModal !== 'function') {
+      if (confirm(texto)) f.submit();
+      return;
+    }
+    document.getElementById('confirmar-titulo').textContent = f.dataset.confirmar;
+    document.getElementById('confirmar-texto').textContent = f.dataset.confirmarTexto || '';
+    document.getElementById('confirmar-si').textContent = f.dataset.confirmarBoton || 'Aceptar';
+    dialogo.returnValue = '';
+    dialogo.onclose = () => { if (dialogo.returnValue === 'si') f.submit(); };
+    dialogo.showModal();
   });
+  // Pulsar fuera del diálogo es como cancelar.
+  dialogo?.addEventListener('click', e => { if (e.target === dialogo) dialogo.close('no'); });
 
   for (const s of document.querySelectorAll('select[data-enviar]')) s.addEventListener('change', () => s.form.submit());
 

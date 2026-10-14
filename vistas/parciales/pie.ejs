@@ -1,4 +1,17 @@
 <div class="aviso-flotante" id="aviso" role="status"></div>
+<dialog class="dialogo" id="confirmar" aria-labelledby="confirmar-titulo" aria-describedby="confirmar-texto">
+  <form method="dialog">
+    <div class="dialogo-cab">
+      <span class="dialogo-icono" aria-hidden="true"><svg class="i"><use href="#i-aviso"/></svg></span>
+      <h2 id="confirmar-titulo"></h2>
+    </div>
+    <p id="confirmar-texto"></p>
+    <div class="botonera">
+      <button class="btn fantasma" value="no" autofocus>Cancelar</button>
+      <button class="btn borrar" value="si" id="confirmar-si"></button>
+    </div>
+  </form>
+</dialog>
 <script src="/estaticos/panel.js"></script>
 </body>
 </html>

@@ -56,7 +56,9 @@
       </form>
       <% } %>
 
-      <form class="zona-peligro" method="post" action="/panel/enlaces/<%= e.id %>/borrar" data-confirmar="¿Borrar <%= corta(e.nombre) %>? Si está impreso en algún sitio, dejará de funcionar. Si solo quieres pararlo un tiempo, mejor quita «Activo».">
+      <form class="zona-peligro" method="post" action="/panel/enlaces/<%= e.id %>/borrar" data-confirmar="¿Borrar <%= corta(e.nombre) %>?"
+            data-confirmar-texto="Si está impreso en algún sitio, dejará de funcionar. Si solo quieres pararlo un tiempo, mejor quita «Activo»."
+            data-confirmar-boton="Borrar">
         <p>Borrar es para siempre. Si solo quieres pararlo, quita «Activo».</p>
         <button class="btn peligro peq">Borrar el enlace</button>
       </form>
