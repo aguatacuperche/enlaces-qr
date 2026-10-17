@@ -67,6 +67,38 @@
     ajustar();
   }
 
+  // Editor de los enlaces de una página: añadir, quitar y ordenar sin recargar.
+  const lista = document.getElementById('elementos');
+  const plantilla = document.getElementById('plantilla-elemento');
+  if (lista && plantilla) {
+    const max = Number(lista.dataset.max) || 30;
+    const anadir = document.getElementById('anadir-elemento');
+    const ajustar = () => { anadir.disabled = lista.children.length >= max; };
+    anadir.addEventListener('click', () => {
+      if (lista.children.length >= max) return;
+      lista.append(plantilla.content.cloneNode(true));
+      lista.lastElementChild.querySelector('input').focus();
+      ajustar();
+    });
+    lista.addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      const fila = b.closest('.elemento');
+      if (b.hasAttribute('data-quitar')) {
+        if (lista.children.length > 1) fila.remove();
+        else fila.querySelectorAll('input').forEach(i => { i.value = ''; });
+        ajustar();
+      } else if (b.dataset.mover === '-1' && fila.previousElementSibling) {
+        fila.previousElementSibling.before(fila);
+        b.focus();
+      } else if (b.dataset.mover === '1' && fila.nextElementSibling) {
+        fila.nextElementSibling.after(fila);
+        b.focus();
+      }
+    });
+    ajustar();
+  }
+
   // Ayuda al pasar por las barras del gráfico de visitas.
   for (const g of document.querySelectorAll('[data-grafico]')) {
     const ayudaG = g.querySelector('.ayuda-grafico'), svg = g.querySelector('svg');

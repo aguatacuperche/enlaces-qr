@@ -17,6 +17,14 @@ les sacan un QR con los colores del centro y ven cuántas visitas tienen.
 - **Creador de QR** con los colores y el logo del centro, puntos y esquinas a elegir y un marco con texto. Se descarga
   en PNG (300 ppp), SVG y PDF a tamaño de pegatina, folio o cartel. Antes de la descarga, la app lee el QR para
   comprobar que funciona.
+- **Cartel y pegatinas para imprimir**: un cartel A4 o A3 (logo, título, explicación, el QR y la dirección escrita) y
+  hojas de pegatinas en los formatos A4 habituales o a medida, empezando en cualquier etiqueta de una hoja ya usada.
+- **Páginas con varios enlaces**: un enlace corto que abre una página sencilla del centro con una lista de enlaces
+  (los de una clase, una excursión…), detrás de un solo QR.
+- **Aviso de enlaces que no abren**: una vez por semana se comprueba cada destino. Si ya no existe, da error o no
+  responde, sale marcado en el panel; si pide iniciar sesión en Google o es un formulario cerrado, sale como aviso que
+  el dueño puede dar por bueno. No se comprueban direcciones de la red interna.
+- **Ayuda**: una tarjeta de bienvenida la primera vez y una página con las dudas frecuentes.
 - **Visitas sin datos personales**: un contador por enlace y día, sin IP, sin cookies y sin nada de quien visita. No
   cuentan los robots ni las vistas previas de WhatsApp y similares.
 - `/svg/<nombre>` y `/png/<nombre>` dan el QR de un enlace, por si alguien los tiene enlazados.
@@ -38,8 +46,10 @@ src/
   acceso.ts         quién puede entrar
   nombres.ts        reglas de los nombres de enlace
   marca.ts          colores y logos del centro
+  comprobacion.ts   ¿sigue abriendo un destino?
+  comprobador.ts    la ronda semanal de comprobaciones
   migracion.ts      qué se migra de la app anterior y cómo
-  qr/               dibujo del QR (SVG), PNG, PDF y comprobación de lectura
+  qr/               dibujo del QR (SVG), PNG, PDF, cartel, pegatinas y comprobación de lectura
 vistas/             plantillas EJS
 publico/            estilos y JavaScript del navegador
 marca-ejemplo/      marca neutra de ejemplo
@@ -94,7 +104,8 @@ Una imagen Docker (`Dockerfile`) y un `docker-compose.yml` pensado para ir detr�
    `https://<dominio>/auth/google/callback`.
 3. `.env` a partir de `.env.example`, y la carpeta de marca. Mientras `VIRTUAL_HOST` y `LETSENCRYPT_HOST` estén
    comentadas, el proxy no publica la app: sirve para dejarla lista y comprobarla antes de abrirla.
-4. `docker compose up -d --build`.
+4. `docker compose up -d --build`. La comprobación semanal de destinos necesita que el contenedor pueda salir a
+   internet (como para la entrada con Google).
 
 ### Migración desde la app anterior
 

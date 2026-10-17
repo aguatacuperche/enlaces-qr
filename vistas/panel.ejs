@@ -1,6 +1,6 @@
 <%
   const base = vista === 'mios' ? '/panel' : '/panel/todos';
-  const actual = { q: filtro.q || '', estado: filtro.estado || '', etiqueta: filtro.etiqueta || '', orden: filtro.orden === 'recientes' ? '' : filtro.orden, dueno: sinDueno ? 'sin' : '' };
+  const actual = { q: filtro.q || '', estado: filtro.estado || '', etiqueta: filtro.etiqueta || '', orden: filtro.orden === 'recientes' ? '' : filtro.orden, dueno: sinDueno ? 'sin' : '', problemas: filtro.problemas ? '1' : '' };
   const con = cambios => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries({ ...actual, ...cambios })) if (v) p.set(k, v);
@@ -13,6 +13,14 @@
 <%- include('parciales/cabeza', { titulo: vista === 'mios' ? 'Mis enlaces' : 'Todos los enlaces' }) %>
 <%- include('parciales/barra', { seccion: vista }) %>
 <main class="cuerpo">
+  <% if (mostrarAyuda) { %><%- include('parciales/bienvenida') %><% } %>
+  <% if (cuentas.problemas && !actual.problemas) { %>
+    <a class="aviso-problemas" href="<%= con({ problemas: '1', estado: '' }) %>">
+      <svg class="i"><use href="#i-aviso"/></svg>
+      <span><b><%= cuentas.problemas === 1 ? 'Un enlace necesita revisión' : `${cuentas.problemas} enlaces necesitan revisión` %>:</b> <%= cuentas.problemas === 1 ? 'no abre, o no abre como se espera' : 'no abren, o no abren como se espera' %>.</span>
+      <span class="ver">Ver<svg class="i"><use href="#i-flecha"/></svg></span>
+    </a>
+  <% } %>
   <% if (vista === 'mios') { %>
   <form class="nuevo" method="post" action="/panel/enlaces" id="nuevo">
     <div class="nuevo-fila">
@@ -22,6 +30,7 @@
       <label class="nombre-campo <%= error && error.campo === 'nombre' ? 'mal' : '' %>" title="Nombre del enlace: puedes cambiarlo"><span><%= dominio %>/</span><input name="nombre" id="nombre" required value="<%= nuevo.nombre || '' %>" aria-label="Nombre del enlace" autocomplete="off" spellcheck="false"></label>
       <div class="campo titulo-campo"><input name="titulo" placeholder="Título (opcional)" value="<%= nuevo.titulo || '' %>" aria-label="Título" maxlength="120"></div>
       <button class="btn">Crear</button>
+      <button class="btn fantasma" formaction="/panel/paginas" formnovalidate title="Una página con varios enlaces y un solo QR">Nueva página</button>
     </div>
     <p class="nuevo-ayuda <%= error ? 'mal' : '' %>" id="nombre-ayuda" aria-live="polite"><%= error ? error.message : 'El nombre sale solo; si lo quieres a tu gusto, escríbelo encima (minúsculas, números y guiones).' %></p>
   </form>
@@ -31,6 +40,7 @@
 
   <form class="herramientas" method="get" action="<%= base %>">
     <% if (sinDueno) { %><input type="hidden" name="dueno" value="sin"><% } %>
+    <% if (actual.problemas) { %><input type="hidden" name="problemas" value="1"><% } %>
     <% if (actual.estado) { %><input type="hidden" name="estado" value="<%= actual.estado %>"><% } %>
     <label class="campo"><svg class="i"><use href="#i-buscar"/></svg><input type="search" name="q" value="<%= actual.q %>" placeholder="Buscar enlaces" aria-label="Buscar"></label>
     <nav class="filtros" aria-label="Estado">
@@ -38,6 +48,7 @@
       <a href="<%= con({ estado: 'activo' }) %>" class="<%= actual.estado === 'activo' ? 'activo' : '' %>">Activos <small><%= cuentas.activo %></small></a>
       <a href="<%= con({ estado: 'pausa' }) %>" class="<%= actual.estado === 'pausa' ? 'activo' : '' %>">En pausa <small><%= cuentas.pausa %></small></a>
       <a href="<%= con({ estado: 'caducado' }) %>" class="<%= actual.estado === 'caducado' ? 'activo' : '' %>">Caducados <small><%= cuentas.caducado %></small></a>
+      <% if (cuentas.problemas || actual.problemas) { %><a href="<%= con({ problemas: actual.problemas ? '' : '1' }) %>" class="<%= actual.problemas ? 'activo' : '' %> problemas">Con problemas <small><%= cuentas.problemas %></small></a><% } %>
       <% if (vista === 'todos') { %><a href="<%= con({ dueno: sinDueno ? '' : 'sin' }) %>" class="<%= sinDueno ? 'activo' : '' %>">Sin dueño</a><% } %>
     </nav>
     <div class="derecha">
@@ -75,10 +86,13 @@
             <% if (e.etiqueta) { %><a class="etiqueta" style="--c:<%= colorEtiqueta(e.etiqueta) %>" href="<%= con({ etiqueta: e.etiqueta }) %>"><%= e.etiqueta %></a><% } %>
             <% if (e.caduca) { %><span class="chip-gris"><svg class="i"><use href="#i-reloj"/></svg><%= estado === 'caducado' ? 'Caducó' : 'Caduca' %> <%= fechaCorta(e.caduca) %></span><% } %>
             <% if (e.id === recienCreado) { %><span class="chip-gris nuevo">Recién creado</span><% } %>
+            <% if (e.tipo === 'pagina') { %><span class="chip-gris"><svg class="i"><use href="#i-lista"/></svg>Página</span><% } %>
+            <% if (e.problema && !e.aviso_ignorado) { %><span class="chip-problema <%= esAviso(e.problema) ? 'aviso' : 'roto' %>" title="<%= e.problema_detalle %>"><svg class="i"><use href="#i-aviso"/></svg><%= esAviso(e.problema) ? 'Revisar' : 'No abre' %></span><% } %>
+            <% if (e.elementos_mal) { %><span class="chip-problema roto" title="Abre su ficha para ver cuáles"><svg class="i"><use href="#i-aviso"/></svg><%= e.elementos_mal === 1 ? '1 enlace no abre' : `${e.elementos_mal} enlaces no abren` %></span><% } %>
           </div>
         </td>
         <td><span class="corto"><span><%= dominio %>/</span><b><%= e.nombre %></b><button type="button" class="ic" title="Copiar enlace" aria-label="Copiar <%= corta(e.nombre) %>" data-copiar="<%= urlCorta(e.nombre) %>"><svg class="i"><use href="#i-copiar"/></svg></button></span></td>
-        <td class="col-destino"><a class="destino" href="<%= e.destino %>" title="<%= e.destino %>" target="_blank" rel="noopener noreferrer"><%= destinoCorto(e.destino) %></a></td>
+        <td class="col-destino"><% if (e.tipo === 'pagina') { %><span class="destino"><%= e.elementos === 1 ? 'Página con 1 enlace' : `Página con ${e.elementos} enlaces` %></span><% } else { %><a class="destino" href="<%= e.destino %>" title="<%= e.destino %>" target="_blank" rel="noopener noreferrer"><%= destinoCorto(e.destino) %></a><% } %></td>
         <% if (vista === 'todos') { %><td><%= e.dueno || 'Sin dueño' %></td><% } %>
         <td><div class="visitas" title="<%= numero(e.visitas_mes) %> visitas en los últimos 30 días"><%- minigrafico(series.get(e.id), estado !== 'activo') %><div><b><%= numero(e.visitas) %></b><small><%= numero(e.visitas_mes) %> en 30 días</small></div></div></td>
         <td>

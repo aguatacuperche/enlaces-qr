@@ -2,11 +2,11 @@
 import type { Bd } from './db.ts';
 import { normalizarCorreo } from './acceso.ts';
 
-export type Usuario = { id: number; correo: string; nombre: string; admin: boolean; preferencias_qr: Record<string, string> | null };
+export type Usuario = { id: number; correo: string; nombre: string; admin: boolean; preferencias_qr: Record<string, string> | null; ayuda_cerrada: boolean };
 
 export type UsuarioConEnlaces = Usuario & { enlaces: number; ultima_entrada: Date | null };
 
-const CAMPOS = 'id, correo, nombre, admin, preferencias_qr';
+const CAMPOS = 'id, correo, nombre, admin, preferencias_qr, ayuda_cerrada';
 
 /** Llamar solo después de comprobar `puedeEntrar`. Sin nombre, se conserva el que ya tenía (o se usa el correo). */
 export async function registrarEntrada(bd: Bd, correo: string, nombre: string): Promise<Usuario> {
@@ -36,6 +36,10 @@ export async function cambiarAdmin(bd: Bd, id: number, admin: boolean): Promise<
 export async function pasarEnlaces(bd: Bd, de: number | null, a: number): Promise<number> {
   const r = await bd.query('update enlaces set usuario_id = $2, actualizado = now() where usuario_id is not distinct from $1', [de, a]);
   return r.rowCount ?? 0;
+}
+
+export async function cerrarAyuda(bd: Bd, id: number): Promise<void> {
+  await bd.query('update usuarios set ayuda_cerrada = true where id = $1', [id]);
 }
 
 export async function guardarPreferenciasQR(bd: Bd, id: number, opciones: Record<string, string>): Promise<void> {

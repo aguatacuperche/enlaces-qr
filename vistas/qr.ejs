@@ -57,27 +57,81 @@
 
     <div class="vista">
       <div class="vista-cab">
-        <b>Vista previa</b>
-        <span class="lectura" id="lectura" aria-live="polite"><svg class="i"><use href="#i-ok"/></svg>Comprobando…</span>
-      </div>
-      <div class="lienzo <%= o.fondo === 'transparente' ? 'cuadros' : '' %>" id="lienzo">
-        <img id="vista-previa" src="<%= base %>.svg?<%= consulta(o) %>" alt="Vista previa del código QR de <%= corta(e.nombre) %>">
-      </div>
-      <fieldset class="grupo" style="padding:0;border:0"><legend class="oculto">Tamaño</legend>
-        <div class="tamanos">
-          <% for (const [clave, t] of Object.entries(tamanos)) { %>
-            <label><input type="radio" name="tamano" value="<%= clave %>" <%= o.tamano === clave ? 'checked' : '' %>><span><b><%= t.nombre %></b><small><%= t.cm ? `${t.cm} × ${t.cm} cm` : `${t.px} px` %></small></span></label>
+        <div class="pestanas-qr" role="tablist" aria-label="Qué descargar">
+          <% for (const [m, t] of [['codigo', 'Código QR'], ['cartel', 'Cartel'], ['pegatinas', 'Pegatinas']]) { %>
+            <button type="button" role="tab" data-modo="<%= m %>" aria-selected="<%= modo === m %>"><%= t %></button>
           <% } %>
         </div>
-      </fieldset>
-      <div class="descargas">
-        <a class="btn" data-formato="png" href="<%= base %>.png?<%= consulta(o) %>&amp;descargar=1"><svg class="i"><use href="#i-bajar"/></svg>PNG</a>
-        <a class="btn" data-formato="svg" href="<%= base %>.svg?<%= consulta(o) %>&amp;descargar=1"><svg class="i"><use href="#i-bajar"/></svg>SVG</a>
-        <a class="btn" data-formato="pdf" href="<%= base %>.pdf?<%= consulta(o) %>&amp;descargar=1"><svg class="i"><use href="#i-bajar"/></svg>PDF</a>
-        <button type="button" class="btn suave" id="copiar-imagen"><svg class="i"><use href="#i-imagen"/></svg>Copiar imagen</button>
-        <button type="button" class="btn suave" data-copiar="<%= urlCorta(e.nombre) %>"><svg class="i"><use href="#i-copiar"/></svg>Copiar enlace</button>
+        <span class="lectura" id="lectura" aria-live="polite"><svg class="i"><use href="#i-ok"/></svg>Comprobando…</span>
       </div>
-      <p class="nota">El PNG sale a 300 ppp para el tamaño elegido y el PDF lo coloca a su tamaño real en un folio (o un A3 para el cartel). El SVG vale para cualquier tamaño.</p>
+      <input type="hidden" name="modo" value="<%= modo %>" id="modo">
+
+      <div data-panel="codigo" <%= modo === 'codigo' ? '' : 'hidden' %>>
+        <div class="lienzo <%= o.fondo === 'transparente' ? 'cuadros' : '' %>" id="lienzo">
+          <img id="vista-previa" src="<%= base %>.svg?<%= consulta(o) %>" alt="Vista previa del código QR de <%= corta(e.nombre) %>">
+        </div>
+        <fieldset class="grupo" style="padding:0;border:0"><legend class="oculto">Tamaño</legend>
+          <div class="tamanos">
+            <% for (const [clave, t] of Object.entries(tamanos)) { %>
+              <label><input type="radio" name="tamano" value="<%= clave %>" <%= o.tamano === clave ? 'checked' : '' %>><span><b><%= t.nombre %></b><small><%= t.cm ? `${t.cm} × ${t.cm} cm` : `${t.px} px` %></small></span></label>
+            <% } %>
+          </div>
+        </fieldset>
+        <div class="descargas">
+          <a class="btn" data-formato="qr.png" href="<%= base %>.png?<%= consulta(o) %>&amp;descargar=1"><svg class="i"><use href="#i-bajar"/></svg>PNG</a>
+          <a class="btn" data-formato="qr.svg" href="<%= base %>.svg?<%= consulta(o) %>&amp;descargar=1"><svg class="i"><use href="#i-bajar"/></svg>SVG</a>
+          <a class="btn" data-formato="qr.pdf" href="<%= base %>.pdf?<%= consulta(o) %>&amp;descargar=1"><svg class="i"><use href="#i-bajar"/></svg>PDF</a>
+          <button type="button" class="btn suave" id="copiar-imagen"><svg class="i"><use href="#i-imagen"/></svg>Copiar imagen</button>
+          <button type="button" class="btn suave" data-copiar="<%= urlCorta(e.nombre) %>"><svg class="i"><use href="#i-copiar"/></svg>Copiar enlace</button>
+        </div>
+        <p class="nota">El PNG sale a 300 ppp para el tamaño elegido y el PDF lo coloca a su tamaño real en un folio (o un A3 para el cartel). El SVG vale para cualquier tamaño.</p>
+      </div>
+
+      <div data-panel="cartel" <%= modo === 'cartel' ? '' : 'hidden' %>>
+        <div class="ajustes-impresion">
+          <div class="segmento" role="radiogroup" aria-label="Tamaño del cartel">
+            <label><input type="radio" name="cartel_tamano" value="a4" checked><span>Folio A4</span></label>
+            <label><input type="radio" name="cartel_tamano" value="a3"><span>Cartel A3</span></label>
+          </div>
+          <label class="campo"><input name="cartel_titulo" value="<%= e.titulo %>" maxlength="140" aria-label="Título del cartel" placeholder="Título del cartel"></label>
+          <label class="campo"><input name="cartel_texto" maxlength="300" aria-label="Explicación" placeholder="Explicación (opcional): «Escanea para rellenar la autorización»"></label>
+        </div>
+        <iframe class="vista-pdf" data-pdf="cartel" title="Vista previa del cartel"></iframe>
+        <div class="descargas">
+          <a class="btn" data-formato="cartel.pdf" href="#"><svg class="i"><use href="#i-imprimir"/></svg>Descargar el cartel (PDF)</a>
+        </div>
+        <p class="nota">Lleva arriba el logo del centro, el QR con el estilo de la izquierda y, debajo, la dirección escrita para quien no pueda escanear.</p>
+      </div>
+
+      <div data-panel="pegatinas" <%= modo === 'pegatinas' ? '' : 'hidden' %>>
+        <div class="ajustes-impresion">
+          <label class="campo"><select name="hoja" id="hoja" aria-label="Hoja de etiquetas">
+            <% for (const [clave, h] of Object.entries(hojas)) { %><option value="<%= clave %>"><%= h.nombre %></option><% } %>
+            <option value="medida">A medida…</option>
+          </select></label>
+          <fieldset class="medida" id="medida" hidden>
+            <legend>Medidas en milímetros (vienen en la caja)</legend>
+            <% for (const [k, t, v] of [['m_columnas', 'Columnas', 3], ['m_filas', 'Filas', 7], ['m_ancho', 'Ancho', 70], ['m_alto', 'Alto', '42,4'], ['m_sup', 'Margen arriba', 0], ['m_izq', 'Margen izquierda', 0], ['m_seph', 'Separación entre columnas', 0], ['m_sepv', 'Separación entre filas', 0]]) { %>
+              <label><span><%= t %></span><input name="<%= k %>" inputmode="decimal" value="<%= v %>"></label>
+            <% } %>
+          </fieldset>
+          <div class="dos-campos">
+            <label><span>Empezar en la etiqueta</span><input type="number" name="empezar" min="1" value="1"></label>
+            <label><span>Cuántas</span><input type="number" name="cuantas" min="1" max="400" placeholder="Hasta llenar la hoja"></label>
+          </div>
+          <div class="segmento" role="radiogroup" aria-label="Texto de cada pegatina">
+            <label><input type="radio" name="pegatina_texto" value="titulo" checked><span>Título y dirección</span></label>
+            <label><input type="radio" name="pegatina_texto" value="direccion"><span>Solo la dirección</span></label>
+            <label><input type="radio" name="pegatina_texto" value="nada"><span>Solo el QR</span></label>
+          </div>
+          <label class="casilla"><input type="checkbox" name="bordes" value="si">Marcar los bordes (para probar primero en un folio)</label>
+        </div>
+        <iframe class="vista-pdf" data-pdf="pegatinas" title="Vista previa de la hoja de pegatinas"></iframe>
+        <div class="descargas">
+          <a class="btn" data-formato="pegatinas.pdf" href="#"><svg class="i"><use href="#i-imprimir"/></svg>Descargar las pegatinas (PDF)</a>
+        </div>
+        <p class="nota"><b>Imprime al 100 %</b>, sin «ajustar a la página», o no cuadrarán con las etiquetas. En las pegatinas el código va sin marco: el texto va al lado.</p>
+      </div>
     </div>
     <noscript><button class="btn">Ver la vista previa</button></noscript>
   </form>

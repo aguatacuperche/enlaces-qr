@@ -7,6 +7,7 @@
       <a href="/panel/usuarios" class="<%= seccion === 'usuarios' ? 'activo' : '' %>">Usuarios</a>
     <% } %>
   </nav>
+  <a class="ayuda-barra" href="/panel/ayuda" title="Qué se puede hacer aquí"><svg class="i"><use href="#i-ayuda"/></svg><span>Ayuda</span></a>
   <div class="usuario">
     <span class="avatar" aria-hidden="true"><%= usuario.nombre.split(/\s+/).slice(0, 2).map(p => p[0] || '').join('').toUpperCase() %></span>
     <span class="nombre-usuario"><%= usuario.nombre %></span>

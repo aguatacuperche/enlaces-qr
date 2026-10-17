@@ -3,6 +3,7 @@ import { estadoDe } from './enlaces.ts';
 import { fechaCorta, fechaLarga, fechaSinAno, hoy } from './fechas.ts';
 import { config, urlCorta } from './config.ts';
 import { cargarMarca } from './marca.ts';
+import { esAviso } from './comprobacion.ts';
 
 const numero = new Intl.NumberFormat('es-ES');
 const PAPELES_ETIQUETA = ['principal', 'segundo', 'tercero', 'acento'] as const;
@@ -58,7 +59,7 @@ function destinoCorto(destino: string): string {
 
 export const ayudasVistas = {
   numero: (n: number) => numero.format(n),
-  fechaCorta, fechaLarga, hoy, estadoDe, colorEtiqueta, minigrafico, graficoSemanas, destinoCorto, urlCorta,
+  fechaCorta, fechaLarga, hoy, estadoDe, esAviso, colorEtiqueta, minigrafico, graficoSemanas, destinoCorto, urlCorta,
   /** «enlaces.ejemplo.es/excursion-museo»: la dirección corta sin https:// para mostrar. */
   corta: (nombre: string) => `${new URL(config.urlPublica).host}/${nombre}`,
   dominio: new URL(config.urlPublica).host,

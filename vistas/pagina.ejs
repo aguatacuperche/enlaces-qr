@@ -1,0 +1,20 @@
+<%- include('parciales/cabeza', { titulo: pagina.titulo }) %>
+<main class="pagina-publica">
+  <div class="nf-marca"><img src="/marca/isotipo.svg" alt=""><%= centro.nombre %></div>
+  <div class="pagina-caja">
+    <h1><%= pagina.titulo %></h1>
+    <% if (pagina.descripcion) { %><p class="pagina-texto"><%= pagina.descripcion %></p><% } %>
+    <% if (elementos.length) { %>
+      <ul class="pagina-enlaces">
+        <% for (const x of elementos) { %>
+          <li><a href="<%= x.url %>" rel="noopener"><span><b><%= x.titulo %></b><small><%= destinoCorto(x.url).split('/')[0] %></small></span><svg class="i" aria-hidden="true"><use href="#i-flecha"/></svg></a></li>
+        <% } %>
+      </ul>
+    <% } else { %>
+      <p class="pagina-texto">Todavía no hay enlaces en esta página.</p>
+    <% } %>
+  </div>
+  <div class="nf-pie"><%= centro.pie %></div>
+</main>
+</body>
+</html>

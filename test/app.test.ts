@@ -2,7 +2,8 @@
  * Pruebas de la app de verdad, con su base de datos (una base aparte, que se vacía al empezar).
  * Necesitan PostgreSQL: docker compose -f docker-compose.dev.yml up -d
  */
-import type { Server } from 'node:http';
+import http, { type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PUERTO = 3987;
@@ -11,6 +12,9 @@ process.env.URL_PUBLICA = BASE;
 process.env.ENTRADA_DE_PRUEBA = 'si';
 process.env.DOMINIO_CORREO = 'colegio.example';
 process.env.CORREOS_EXCLUIDOS = '\\d';
+// La comprobación de destinos se prueba contra un servidor local y sin la ronda periódica.
+process.env.COMPROBAR_RED_INTERNA = 'si';
+process.env.COMPROBAR_ENLACES = 'no';
 process.env.DATABASE_URL = process.env.DATABASE_URL_PRUEBAS ?? 'postgres://enlaces:enlaces@localhost:5433/enlaces_pruebas';
 
 const { conectar, migrar } = await import('../src/db.ts');
@@ -48,14 +52,14 @@ afterAll(async () => {
 
 const NAVEGADOR = 'Mozilla/5.0 (pruebas)';
 
-async function pedir(ruta: string, op: { galleta?: string; cuerpo?: Record<string, string>; agente?: string; metodo?: string; origen?: string | null } = {}) {
+async function pedir(ruta: string, op: { galleta?: string; cuerpo?: Record<string, string | string[]>; agente?: string; metodo?: string; origen?: string | null } = {}) {
   const headers: Record<string, string> = { 'user-agent': op.agente ?? NAVEGADOR };
   if (op.galleta) headers.cookie = op.galleta;
   if (op.cuerpo) headers['content-type'] = 'application/x-www-form-urlencoded';
   if (op.cuerpo && op.origen !== null) headers.origin = op.origen ?? BASE;
   const r = await fetch(BASE + ruta, {
     method: op.metodo ?? (op.cuerpo ? 'POST' : 'GET'), headers, redirect: 'manual',
-    body: op.cuerpo ? new URLSearchParams(op.cuerpo) : undefined,
+    body: op.cuerpo ? new URLSearchParams(Object.entries(op.cuerpo).flatMap(([k, v]) => (Array.isArray(v) ? v : [v]).map(x => [k, x]))) : undefined,
   });
   return { estado: r.status, destino: r.headers.get('location'), tipo: r.headers.get('content-type') ?? '', texto: await r.text(), galleta: r.headers.get('set-cookie')?.split(';')[0] };
 }
@@ -213,5 +217,106 @@ describe('panel', () => {
     const r = await pedir('/panel/usuarios/pasar', { galleta: luis, cuerpo: { de: String(ids.luis), a: String(ids.ana) } });
     expect(r.destino).toBe('/panel/usuarios?hecho=1');
     expect((await bd.query('select usuario_id from enlaces where id = $1', [ids.info])).rows[0].usuario_id).toBe(ids.ana);
+  });
+});
+
+describe('avisos de enlaces que no abren', () => {
+  let destinos: Server;
+  let web = '';
+  beforeAll(async () => {
+    destinos = http.createServer((req, res) => {
+      if (req.url === '/bien') return res.end('ok');
+      if (req.url === '/privado') { res.writeHead(302, { location: `${web}/ServiceLogin` }); return res.end(); }
+      if (req.url === '/ServiceLogin') return res.end('inicia sesión');
+      res.statusCode = 404;
+      res.end();
+    });
+    await new Promise<void>(ok => destinos.listen(0, '127.0.0.1', ok));
+    web = `http://127.0.0.1:${(destinos.address() as AddressInfo).port}`;
+  });
+  afterAll(() => new Promise(ok => destinos.close(ok)));
+
+  const crear = async (g: string, nombre: string, destino: string) => {
+    await pedir('/panel/enlaces', { galleta: g, cuerpo: { destino, nombre, titulo: nombre } });
+    return (await bd.query<{ id: number }>('select id from enlaces where nombre = $1', [nombre])).rows[0].id;
+  };
+
+  it('«Comprobar ahora» marca el enlace roto, sale en «Con problemas» y se limpia al cambiar el destino', async () => {
+    const g = await entrarComo('ana.perez@colegio.example');
+    const id = await crear(g, 'roto-de-prueba', `${web}/ya-no-esta`);
+    await pedir(`/panel/enlaces/${id}/comprobar`, { galleta: g, cuerpo: {} });
+    expect((await pedir(`/panel/enlaces/${id}`, { galleta: g })).texto).toContain('Este enlace no abre');
+    const lista = await pedir('/panel?problemas=1', { galleta: g });
+    expect(lista.texto).toContain('roto-de-prueba');
+    expect(lista.texto).toContain('No abre');
+    expect((await pedir('/panel', { galleta: g })).texto).toMatch(/necesita revisión|necesitan revisión/);
+    await pedir(`/panel/enlaces/${id}`, { galleta: g, cuerpo: { nombre: 'roto-de-prueba', destino: `${web}/bien`, titulo: 'Arreglado', activo: 'si' } });
+    expect((await bd.query('select problema from enlaces where id = $1', [id])).rows[0].problema).toBeNull();
+    await pedir(`/panel/enlaces/${id}/comprobar`, { galleta: g, cuerpo: {} });
+    expect((await pedir(`/panel/enlaces/${id}`, { galleta: g })).texto).toContain('Abre bien');
+  });
+
+  it('«Dar por bueno» vale para los avisos, no para los enlaces rotos', async () => {
+    const g = await entrarComo('ana.perez@colegio.example');
+    const aviso = await crear(g, 'privado-de-prueba', `${web}/privado`);
+    const roto = await crear(g, 'otro-roto', `${web}/nada`);
+    for (const id of [aviso, roto]) {
+      await pedir(`/panel/enlaces/${id}/comprobar`, { galleta: g, cuerpo: {} });
+      await pedir(`/panel/enlaces/${id}/ignorar`, { galleta: g, cuerpo: {} });
+    }
+    const estado = async (id: number) => (await bd.query('select problema, aviso_ignorado from enlaces where id = $1', [id])).rows[0];
+    expect(await estado(aviso)).toEqual({ problema: 'pide-sesion', aviso_ignorado: true });
+    expect(await estado(roto)).toEqual({ problema: 'no-existe', aviso_ignorado: false });
+    expect((await pedir('/panel?problemas=1', { galleta: g })).texto).not.toContain('privado-de-prueba');
+  });
+});
+
+describe('páginas con varios enlaces', () => {
+  it('se crea, se rellena y se ve en su dirección, contando la visita', async () => {
+    const g = await entrarComo('ana.perez@colegio.example');
+    const r = await pedir('/panel/paginas', { galleta: g, cuerpo: {} });
+    const id = Number(r.destino!.match(/enlaces\/(\d+)/)![1]);
+    const guardar = await pedir(`/panel/enlaces/${id}`, { galleta: g, cuerpo: {
+      titulo: '3.º de Primaria', nombre: '3primaria', descripcion: 'Todo lo del curso.', activo: 'si',
+      elemento_titulo: ['Horario', 'Libros', ''], elemento_url: ['https://colegio.example/horario', 'https://colegio.example/libros', ''],
+    } });
+    expect(guardar.estado).toBe(302);
+    const pagina = await pedir('/3PRIMARIA');
+    expect(pagina.estado).toBe(200);
+    expect(pagina.texto).toContain('3.º de Primaria');
+    expect(pagina.texto).toContain('https://colegio.example/libros');
+    await new Promise(ok => setTimeout(ok, 200));
+    expect(await visitas(id)).toBe(1);
+    expect((await pedir('/panel', { galleta: g })).texto).toContain('Página con 2 enlaces');
+  });
+
+  it('valida los enlaces de la página', async () => {
+    const g = await entrarComo('ana.perez@colegio.example');
+    const id = Number((await pedir('/panel/paginas', { galleta: g, cuerpo: {} })).destino!.match(/enlaces\/(\d+)/)![1]);
+    const mal = await pedir(`/panel/enlaces/${id}`, { galleta: g, cuerpo: { titulo: 'Mal', nombre: 'pagina-mal', elemento_titulo: ['Uno'], elemento_url: ['no es una dirección'] } });
+    expect(mal.estado).toBe(422);
+    expect(mal.texto).toContain('Enlace 1');
+    const muchos = Array.from({ length: 31 }, (_, i) => `https://colegio.example/${i}`);
+    expect((await pedir(`/panel/enlaces/${id}`, { galleta: g, cuerpo: { titulo: 'Muchos', nombre: 'pagina-mal', elemento_titulo: muchos.map(() => 'x'), elemento_url: muchos } })).estado).toBe(422);
+  });
+});
+
+describe('ayuda e impresión', () => {
+  it('la bienvenida sale hasta que se cierra, y la ayuda siempre está', async () => {
+    const g = await entrarComo('nuevo.profe@colegio.example');
+    expect((await pedir('/panel', { galleta: g })).texto).toContain('Esto es lo que puedes hacer aquí');
+    await pedir('/panel/ayuda/cerrar', { galleta: g, cuerpo: { volver: '/panel' } });
+    expect((await pedir('/panel', { galleta: g })).texto).not.toContain('Esto es lo que puedes hacer aquí');
+    expect((await pedir('/panel/ayuda', { galleta: g })).texto).toContain('Preguntas frecuentes');
+  });
+
+  it('el cartel y las pegatinas se descargan en PDF', async () => {
+    const g = await entrarComo('ana.perez@colegio.example');
+    const base = `/panel/enlaces/${ids.museo}`;
+    expect((await pedir(`${base}/cartel.pdf?cartel_tamano=a3&cartel_texto=Hola`, { galleta: g })).tipo).toContain('application/pdf');
+    expect((await pedir(`${base}/pegatinas.pdf?hoja=40-52x29&empezar=5&cuantas=3`, { galleta: g })).tipo).toContain('application/pdf');
+    expect((await pedir(`${base}/pegatinas.pdf?hoja=medida&m_columnas=9&m_ancho=60`, { galleta: g })).estado).toBe(422);
+    const marta = await entrarComo('marta.diaz@colegio.example');
+    expect((await pedir(`${base}/cartel.pdf`, { galleta: marta })).estado).toBe(404);
   });
 });

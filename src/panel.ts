@@ -3,20 +3,56 @@ import express, { type Request, type Response } from 'express';
 import type { Bd } from './db.ts';
 import { exigirAdmin, exigirUsuario } from './entrada.ts';
 import {
-  actualizarEnlace, borrarEnlace, cambiarActivo, cambiarDueno, crearEnlace, enlacePorId, ErrorDeFormulario, etiquetas,
-  limpiarNombre, listarEnlaces, nombreAutomaticoLibre, nombreLibre, recuento, seriesDiarias, seriesSemanales,
-  type Enlace, type Estado, type Filtro,
+  actualizarEnlace, actualizarPagina, borrarEnlace, cambiarActivo, cambiarDueno, crearEnlace, crearPagina, elementosDe,
+  enlacePorId, ErrorDeFormulario, etiquetas, ignorarAviso, limpiarNombre, listarEnlaces, MAX_ELEMENTOS, nombreAutomaticoLibre,
+  nombreLibre, recuento, seriesDiarias, seriesSemanales, type Enlace, type Estado, type Filtro,
 } from './enlaces.ts';
+import { comprobarEnlace } from './comprobador.ts';
+import type { Opciones as OpcionesComprobacion } from './comprobacion.ts';
+import { config } from './config.ts';
 import { problemaConNombre } from './nombres.ts';
 import { recargar } from './redireccion.ts';
-import { cambiarAdmin, guardarPreferenciasQR, listarUsuarios, pasarEnlaces, type Usuario } from './usuarios.ts';
+import { cambiarAdmin, cerrarAyuda, guardarPreferenciasQR, listarUsuarios, pasarEnlaces, type Usuario } from './usuarios.ts';
 import { urlCorta } from './config.ts';
 import { dibujarQR } from './qr/dibujo.ts';
 import { pdf, png, seLee } from './qr/exportar.ts';
 import { aConsulta, leerOpciones, pixelesDe, POR_DEFECTO, TAMANOS, type Opciones } from './qr/opciones.ts';
+import { cartel, HOJAS, pegatinas, problemaConHoja, type Hoja } from './qr/impresion.ts';
+
+/** La hoja de pegatinas pedida: uno de los formatos habituales o una a medida (campos m_*). */
+function hojaDesde(q: Request['query']): { hoja: Hoja; problema: string | null } {
+  const clave = texto(q.hoja);
+  if (clave !== 'medida') return { hoja: HOJAS[clave] ?? Object.values(HOJAS)[0], problema: null };
+  const n = (k: string, d: number) => {
+    const v = texto(q[k]).replace(',', '.').trim();
+    return v === '' ? d : Number(v);
+  };
+  const hoja: Hoja = {
+    nombre: 'A medida', columnas: Math.round(n('m_columnas', 3)), filas: Math.round(n('m_filas', 7)), ancho: n('m_ancho', 70),
+    alto: n('m_alto', 42.4), margenSuperior: n('m_sup', 0), margenIzquierdo: n('m_izq', 0), separacionH: n('m_seph', 0), separacionV: n('m_sepv', 0),
+  };
+  return { hoja, problema: problemaConHoja(hoja) };
+}
+
+const entero = (v: unknown, min: number, max: number, porDefecto: number) => {
+  const n = Math.round(Number(texto(v)));
+  return Number.isFinite(n) && texto(v) !== '' ? Math.min(max, Math.max(min, n)) : porDefecto;
+};
 
 const usuarioDe = (res: Response) => res.locals.usuario as Usuario;
 const texto = (v: unknown) => typeof v === 'string' ? v : '';
+/** Un campo que puede venir repetido (los enlaces de una página): siempre como lista. */
+const lista = (v: unknown): string[] => Array.isArray(v) ? v.map(texto) : typeof v === 'string' ? [v] : [];
+
+/** En pruebas se comprueba contra un servidor local; en producción, nunca la red interna. */
+const opcionesComprobacion = (): OpcionesComprobacion =>
+  ({ permitirRedInterna: !config.produccion && process.env.COMPROBAR_RED_INTERNA === 'si' });
+
+/** Tras crear o cambiar un enlace, su destino se comprueba enseguida, sin hacer esperar al profesor. */
+function comprobarEnSegundoPlano(bd: Bd, id: number) {
+  if (process.env.COMPROBAR_ENLACES === 'no') return;
+  comprobarEnlace(bd, id, opcionesComprobacion()).catch(e => console.error('Comprobación:', e));
+}
 
 function filtroDesde(q: Request['query']): Filtro {
   const estado = texto(q.estado);
@@ -26,6 +62,7 @@ function filtroDesde(q: Request['query']): Filtro {
     estado: (['activo', 'pausa', 'caducado'] as const).includes(estado as Estado) ? estado as Estado : '',
     etiqueta: texto(q.etiqueta) || undefined,
     orden: (['recientes', 'visitas', 'titulo'] as const).includes(orden as 'visitas') ? orden as Filtro['orden'] : 'recientes',
+    problemas: q.problemas === '1',
   };
 }
 
@@ -41,7 +78,7 @@ export function rutasDelPanel(bd: Bd) {
     res.status(404).render('error', { titulo: 'No encontrado', mensaje: 'Ese enlace no existe o no es tuyo.' });
   }
 
-  async function lista(req: Request, res: Response, vista: 'mios' | 'todos', formulario?: { datos: Record<string, string>; error: ErrorDeFormulario }) {
+  async function listado(req: Request, res: Response, vista: 'mios' | 'todos', formulario?: { datos: Record<string, string>; error: ErrorDeFormulario }) {
     const u = usuarioDe(res);
     const sinDueno = vista === 'todos' && req.query.dueno === 'sin';
     const base: Filtro = vista === 'mios' ? { usuarioId: u.id } : sinDueno ? { usuarioId: null } : {};
@@ -57,11 +94,20 @@ export function rutasDelPanel(bd: Bd) {
       nuevo: formulario?.datos ?? { nombre: await nombreAutomaticoLibre(bd) },
       error: formulario?.error,
       recienCreado: Number(req.query.creado) || undefined,
+      mostrarAyuda: vista === 'mios' && !u.ayuda_cerrada,
     });
   }
 
-  r.get('/', (req, res) => lista(req, res, 'mios'));
-  r.get('/todos', exigirAdmin, (req, res) => lista(req, res, 'todos'));
+  r.get('/', (req, res) => listado(req, res, 'mios'));
+  r.get('/todos', exigirAdmin, (req, res) => listado(req, res, 'todos'));
+
+  // ---------- Ayuda ----------
+
+  r.get('/ayuda', (_req, res) => res.render('ayuda', { maxElementos: MAX_ELEMENTOS }));
+  r.post('/ayuda/cerrar', async (req, res) => {
+    await cerrarAyuda(bd, usuarioDe(res).id);
+    res.redirect(volverA(req));
+  });
 
   /** Comprobación al momento mientras se escribe el nombre. */
   r.get('/nombre', async (req, res) => {
@@ -75,10 +121,11 @@ export function rutasDelPanel(bd: Bd) {
     try {
       const id = await crearEnlace(bd, usuarioDe(res).id, datos);
       await recargar(bd);
+      comprobarEnSegundoPlano(bd, id);
       res.redirect(`/panel?creado=${id}`);
     } catch (e) {
       if (!(e instanceof ErrorDeFormulario)) throw e;
-      await lista(req, res, 'mios', { datos, error: e });
+      await listado(req, res, 'mios', { datos, error: e });
     }
   });
 
@@ -88,12 +135,22 @@ export function rutasDelPanel(bd: Bd) {
     await ficha(req, res, e);
   });
 
-  async function ficha(req: Request, res: Response, e: Enlace, formulario?: { datos: Record<string, string>; error: ErrorDeFormulario }) {
+  type Formulario = { datos: Record<string, string>; elementos?: { titulo: string; url: string }[]; error: ErrorDeFormulario };
+
+  async function ficha(req: Request, res: Response, e: Enlace, formulario?: Formulario) {
     res.status(formulario ? 422 : 200).render('enlace', {
       e, semanas: await seriesSemanales(bd, e.id), usuarios: usuarioDe(res).admin ? await listarUsuarios(bd) : [],
+      elementos: formulario?.elementos ?? (e.tipo === 'pagina' ? await elementosDe(bd, e.id) : []), maxElementos: MAX_ELEMENTOS,
       datos: formulario?.datos, error: formulario?.error, guardado: req.query.guardado === '1',
+      comprobado: req.query.comprobado === '1', nueva: req.query.nueva === '1',
     });
   }
+
+  r.post('/paginas', async (_req, res) => {
+    const id = await crearPagina(bd, usuarioDe(res).id);
+    await recargar(bd);
+    res.redirect(`/panel/enlaces/${id}?nueva=1`);
+  });
 
   r.post('/enlaces/:id', async (req, res) => {
     const e = await enlaceDe(req, res);
@@ -102,13 +159,22 @@ export function rutasDelPanel(bd: Bd) {
       nombre: texto(req.body.nombre), destino: texto(req.body.destino), titulo: texto(req.body.titulo),
       etiqueta: texto(req.body.etiqueta), caduca: texto(req.body.caduca), activo: req.body.activo === 'si',
     };
+    const titulos = lista(req.body.elemento_titulo), urls = lista(req.body.elemento_url);
+    const elementos = urls.map((url, i) => ({ titulo: titulos[i] ?? '', url }));
     try {
-      await actualizarEnlace(bd, e.id, datos);
+      if (e.tipo === 'pagina') {
+        await actualizarPagina(bd, e.id, { ...datos, descripcion: texto(req.body.descripcion), elementos });
+      } else {
+        await actualizarEnlace(bd, e.id, datos);
+      }
       await recargar(bd);
+      comprobarEnSegundoPlano(bd, e.id);
       res.redirect(`/panel/enlaces/${e.id}?guardado=1`);
     } catch (err) {
       if (!(err instanceof ErrorDeFormulario)) throw err;
-      await ficha(req, res, e, { datos: { ...datos, activo: datos.activo ? 'si' : '' }, error: err });
+      await ficha(req, res, e, {
+        datos: { ...datos, activo: datos.activo ? 'si' : '', descripcion: texto(req.body.descripcion) }, elementos, error: err,
+      });
     }
   });
 
@@ -118,6 +184,20 @@ export function rutasDelPanel(bd: Bd) {
     await cambiarActivo(bd, e.id, !e.activo);
     await recargar(bd);
     res.redirect(volverA(req));
+  });
+
+  r.post('/enlaces/:id/comprobar', async (req, res) => {
+    const e = await enlaceDe(req, res);
+    if (!e) return;
+    await comprobarEnlace(bd, e.id, opcionesComprobacion());
+    res.redirect(`/panel/enlaces/${e.id}?comprobado=1`);
+  });
+
+  r.post('/enlaces/:id/ignorar', async (req, res) => {
+    const e = await enlaceDe(req, res);
+    if (!e) return;
+    await ignorarAviso(bd, e.id);
+    res.redirect(`/panel/enlaces/${e.id}`);
   });
 
   r.post('/enlaces/:id/borrar', async (req, res) => {
@@ -142,7 +222,7 @@ export function rutasDelPanel(bd: Bd) {
   r.get('/enlaces/:id/qr', async (req, res) => {
     const e = await enlaceDe(req, res);
     if (!e) return;
-    res.render('qr', { e, o: opcionesDe(req, res), tamanos: TAMANOS, consulta: aConsulta });
+    res.render('qr', { e, o: opcionesDe(req, res), tamanos: TAMANOS, hojas: HOJAS, consulta: aConsulta, modo: texto(req.query.modo) || 'codigo' });
   });
 
   r.get('/enlaces/:id/qr.:formato', async (req, res) => {
@@ -164,6 +244,43 @@ export function rutasDelPanel(bd: Bd) {
       case 'json': return res.json({ seLee: seLee(svg, urlCorta(e.nombre)) });
       default: res.status(404).end();
     }
+  });
+
+  // ---------- Cartel y pegatinas ----------
+
+  r.get('/enlaces/:id/cartel.pdf', async (req, res) => {
+    const e = await enlaceDe(req, res);
+    if (!e) return;
+    const o = opcionesDe(req, res);
+    const titulo = (typeof req.query.cartel_titulo === 'string' ? req.query.cartel_titulo : e.titulo).slice(0, 140);
+    const pdfCartel = await cartel(dibujarQR(urlCorta(e.nombre), o, e.nombre), res.app.locals.corta(e.nombre), config.centro.pie, {
+      tamano: req.query.cartel_tamano === 'a3' ? 'a3' : 'a4', titulo, texto: texto(req.query.cartel_texto).slice(0, 300),
+    });
+    if (req.query.descargar === '1') {
+      await guardarPreferenciasQR(bd, usuarioDe(res).id, { ...o, texto: '' });
+      res.attachment(`cartel-${e.nombre.replace(/[^\w-]+/g, '_')}.pdf`);
+    }
+    res.set('Cache-Control', 'private, no-store').type('application/pdf').send(pdfCartel);
+  });
+
+  r.get('/enlaces/:id/pegatinas.pdf', async (req, res) => {
+    const e = await enlaceDe(req, res);
+    if (!e) return;
+    const { hoja, problema } = hojaDesde(req.query);
+    if (problema) return res.status(422).type('html').send(`<p style="font:16px sans-serif;padding:1em;color:#5a1219">${problema}</p>`);
+    // En las pegatinas el código va sin marco: el texto va al lado o debajo.
+    const o: Opciones = { ...opcionesDe(req, res), marco: 'no' };
+    const porHoja = hoja.columnas * hoja.filas;
+    const empezar = entero(req.query.empezar, 1, porHoja, 1);
+    const textoPegatina = (['titulo', 'direccion', 'nada'] as const).find(t => t === req.query.pegatina_texto) ?? 'titulo';
+    const pdfPegatinas = await pegatinas(dibujarQR(urlCorta(e.nombre), o, e.nombre), res.app.locals.corta(e.nombre), e.titulo, {
+      hoja, empezar, cuantas: entero(req.query.cuantas, 1, 400, porHoja - empezar + 1), texto: textoPegatina, bordes: req.query.bordes === 'si',
+    });
+    if (req.query.descargar === '1') {
+      await guardarPreferenciasQR(bd, usuarioDe(res).id, { ...opcionesDe(req, res), texto: '' });
+      res.attachment(`pegatinas-${e.nombre.replace(/[^\w-]+/g, '_')}.pdf`);
+    }
+    res.set('Cache-Control', 'private, no-store').type('application/pdf').send(pdfPegatinas);
   });
 
   // ---------- Usuarios (administradores) ----------

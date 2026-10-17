@@ -1,0 +1,8 @@
+<section class="bienvenida" aria-labelledby="bienvenida-titulo">
+  <div class="bienvenida-cab">
+    <h2 id="bienvenida-titulo">Hola, <%= usuario.nombre.split(/\s+/)[0] %>. Esto es lo que puedes hacer aquí</h2>
+    <form method="post" action="/panel/ayuda/cerrar"><input type="hidden" name="volver" value="/panel"><button class="btn suave peq">Entendido</button></form>
+  </div>
+  <%- include('bienvenida-pasos') %>
+  <p class="bienvenida-pie">Puedes volver a esto cuando quieras desde <a href="/panel/ayuda">Ayuda</a>, arriba.</p>
+</section>

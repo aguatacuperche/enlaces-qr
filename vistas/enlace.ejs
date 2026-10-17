@@ -1,15 +1,20 @@
 <%
-  const d = datos || { nombre: e.nombre, destino: e.destino, titulo: e.titulo, etiqueta: e.etiqueta || '', caduca: e.caduca || '', activo: e.activo ? 'si' : '' };
+  const esPagina = e.tipo === 'pagina';
+  const d = datos || { nombre: e.nombre, destino: e.destino || '', titulo: e.titulo, descripcion: e.descripcion || '', etiqueta: e.etiqueta || '', caduca: e.caduca || '', activo: e.activo ? 'si' : '' };
   const mal = campo => error && error.campo === campo ? 'mal' : '';
   const estado = estadoDe(e);
+  // Sin JavaScript también se pueden añadir enlaces: siempre hay huecos vacíos al final.
+  const filas = esPagina ? [...elementos, ...Array.from({ length: elementos.length ? 1 : 3 }, () => ({ titulo: '', url: '' }))] : [];
 %>
 <%- include('parciales/cabeza', { titulo: e.titulo }) %>
 <%- include('parciales/barra', { seccion: usuario.id === e.usuario_id ? 'mios' : 'todos' }) %>
 <main class="cuerpo">
   <div class="miga"><a href="/panel"><svg class="i"><use href="#i-volver"/></svg>Mis enlaces</a><span>/</span><b><%= e.titulo %></b></div>
+  <% if (nueva) { %><p class="aviso bien" role="status">Página creada. Ponle un título, una explicación si hace falta, y añade sus enlaces. Su QR lleva a todos ellos.</p><% } %>
   <% if (guardado) { %><p class="aviso bien" role="status">Guardado.</p><% } %>
+  <% if (comprobado) { %><p class="aviso bien" role="status">Comprobado ahora.</p><% } %>
   <% if (error) { %><p class="aviso mal" role="alert"><%= error.message %></p><% } %>
-  <div class="ficha">
+  <div class="ficha <%= esPagina ? 'de-pagina' : '' %>">
     <section class="tarjeta">
       <h2>Visitas por semana</h2>
       <p class="sub"><%= corta(e.nombre) %> · últimas 12 semanas</p>
@@ -20,27 +25,103 @@
         <dt>Estado</dt><dd><%= { activo: 'Activo', pausa: 'En pausa', caducado: 'Caducado' }[estado] %></dd>
         <dt>Creado</dt><dd><%= fechaCorta(e.creado) %><% if (e.dueno) { %>, de <%= e.dueno %><% } else { %>, sin dueño<% } %></dd>
       </dl>
+
+      <div class="comprobacion">
+        <% if (esPagina) { %>
+          <% if (!e.elementos) { %>
+            <p>Todavía no tiene enlaces.</p>
+          <% } else if (e.elementos_mal) { %>
+            <p class="roto"><svg class="i"><use href="#i-aviso"/></svg><b><%= e.elementos_mal === 1 ? '1 de sus enlaces no abre' : `${e.elementos_mal} de sus enlaces no abren` %>.</b> Lo tienes marcado en la lista.</p>
+          <% } else if (e.comprobado) { %>
+            <p class="bien"><svg class="i"><use href="#i-ok"/></svg>Sus enlaces abren bien · comprobado el <%= fechaCorta(e.comprobado) %>.</p>
+          <% } else { %>
+            <p>Sus enlaces se comprueban una vez por semana.</p>
+          <% } %>
+        <% } else if (e.problema && !e.aviso_ignorado) { %>
+          <div class="problema <%= esAviso(e.problema) ? 'aviso' : 'roto' %>">
+            <b><svg class="i"><use href="#i-aviso"/></svg><%= esAviso(e.problema) ? 'Revisa este enlace' : 'Este enlace no abre' %></b>
+            <p><%= e.problema_detalle %></p>
+            <p class="sub">Comprobado el <%= fechaCorta(e.comprobado) %>. <%= esAviso(e.problema) ? 'Si es lo que quieres (por ejemplo, un documento solo para cuentas del centro), dalo por bueno.' : 'Cambia el destino por uno que funcione, o pausa el enlace.' %></p>
+            <% if (esAviso(e.problema)) { %>
+              <form method="post" action="/panel/enlaces/<%= e.id %>/ignorar"><button class="btn suave peq">Dar por bueno</button></form>
+            <% } %>
+          </div>
+        <% } else if (e.problema) { %>
+          <p class="bien"><svg class="i"><use href="#i-ok"/></svg>Dado por bueno: <%= e.problema_detalle %></p>
+        <% } else if (e.comprobado) { %>
+          <p class="bien"><svg class="i"><use href="#i-ok"/></svg>Abre bien · comprobado el <%= fechaCorta(e.comprobado) %>.</p>
+        <% } else { %>
+          <p>Se comprueba una vez por semana que el destino sigue abriendo.</p>
+        <% } %>
+        <form method="post" action="/panel/enlaces/<%= e.id %>/comprobar"><button class="enlace-texto">Comprobar ahora</button></form>
+      </div>
+
       <div class="botonera" style="margin-top:16px">
-        <a class="btn" href="/panel/enlaces/<%= e.id %>/qr"><svg class="i"><use href="#i-qr"/></svg>Código QR</a>
+        <a class="btn" href="/panel/enlaces/<%= e.id %>/qr"><svg class="i"><use href="#i-qr"/></svg>QR, cartel y pegatinas</a>
         <button type="button" class="btn suave" data-copiar="<%= urlCorta(e.nombre) %>"><svg class="i"><use href="#i-copiar"/></svg>Copiar enlace</button>
-        <a class="btn fantasma" href="<%= e.destino %>" target="_blank" rel="noopener noreferrer">Abrir el destino</a>
+        <% if (esPagina) { %>
+          <a class="btn fantasma" href="<%= urlCorta(e.nombre) %>" target="_blank" rel="noopener">Ver la página</a>
+        <% } else { %>
+          <a class="btn fantasma" href="<%= e.destino %>" target="_blank" rel="noopener noreferrer">Abrir el destino</a>
+        <% } %>
       </div>
     </section>
 
     <section class="tarjeta">
       <form class="formulario" method="post" action="/panel/enlaces/<%= e.id %>">
-        <label><span>Título</span><div class="campo"><input name="titulo" value="<%= d.titulo %>" maxlength="120"></div></label>
-        <label><span>Destino</span><div class="campo <%= mal('destino') %>"><input name="destino" type="url" required value="<%= d.destino %>"></div>
-          <small>Puedes cambiarlo cuando quieras: los carteles y QR impresos llevarán al nuevo destino.</small></label>
+        <label><span>Título</span><div class="campo"><input name="titulo" value="<%= d.titulo %>" maxlength="120" <%= esPagina ? 'required' : '' %>></div>
+          <% if (esPagina) { %><small>Es lo primero que se ve al abrir la página: «3.º de Primaria», «Excursión al museo»…</small><% } %></label>
+        <% if (esPagina) { %>
+          <label><span>Explicación</span><div class="campo"><textarea name="descripcion" rows="3" maxlength="600" placeholder="Opcional. Por ejemplo: aquí tenéis todo lo del curso."><%= d.descripcion %></textarea></div></label>
+          <fieldset class="elementos <%= mal('elementos') %>">
+            <legend>Enlaces de la página</legend>
+            <ol id="elementos" data-max="<%= maxElementos %>">
+              <% for (const x of filas) { %>
+                <li class="elemento">
+                  <div class="elemento-campos">
+                    <input name="elemento_titulo" value="<%= x.titulo %>" maxlength="120" placeholder="Título (por ejemplo: Horario)" aria-label="Título del enlace">
+                    <input name="elemento_url" type="url" value="<%= x.url %>" placeholder="https://…" aria-label="Dirección del enlace">
+                    <% if (x.problema) { %><small class="chip-problema <%= esAviso(x.problema) ? 'aviso' : 'roto' %>" title="<%= x.problema_detalle %>"><svg class="i"><use href="#i-aviso"/></svg><%= x.problema_detalle %></small><% } %>
+                  </div>
+                  <div class="elemento-botones">
+                    <button type="button" class="ic" data-mover="-1" title="Subir" aria-label="Subir"><svg class="i"><use href="#i-arriba"/></svg></button>
+                    <button type="button" class="ic" data-mover="1" title="Bajar" aria-label="Bajar"><svg class="i"><use href="#i-abajo"/></svg></button>
+                    <button type="button" class="ic" data-quitar title="Quitar" aria-label="Quitar"><svg class="i"><use href="#i-papelera"/></svg></button>
+                  </div>
+                </li>
+              <% } %>
+            </ol>
+            <button type="button" class="btn suave peq" id="anadir-elemento"><svg class="i"><use href="#i-mas-uno"/></svg>Añadir enlace</button>
+            <small>Hasta <%= maxElementos %>. Se ven en este orden; los huecos vacíos no cuentan.</small>
+          </fieldset>
+        <% } else { %>
+          <label><span>Destino</span><div class="campo <%= mal('destino') %>"><input name="destino" type="url" required value="<%= d.destino %>"></div>
+            <small>Puedes cambiarlo cuando quieras: los carteles y QR impresos llevarán al nuevo destino.</small></label>
+        <% } %>
         <label><span>Nombre</span><div class="campo <%= mal('nombre') %>"><span><%= dominio %>/</span><input name="nombre" required value="<%= d.nombre %>" spellcheck="false"></div>
           <small>Si lo cambias, los carteles y QR que ya estén impresos dejarán de funcionar.</small></label>
         <div class="dos">
           <label><span>Etiqueta</span><div class="campo"><input name="etiqueta" value="<%= d.etiqueta %>" maxlength="30" placeholder="Familias, Comedor…"></div></label>
           <label><span>Caduca el</span><div class="campo <%= mal('caduca') %>"><input name="caduca" type="date" value="<%= d.caduca %>"></div><small>Opcional. Después, avisa de que ya no está disponible.</small></label>
         </div>
-        <label class="casilla"><input type="checkbox" name="activo" value="si" <%= d.activo === 'si' ? 'checked' : '' %>>Activo (si lo quitas, el enlace queda en pausa)</label>
+        <label class="casilla"><input type="checkbox" name="activo" value="si" <%= d.activo === 'si' ? 'checked' : '' %>>Activo (si lo quitas, <%= esPagina ? 'la página queda' : 'el enlace queda' %> en pausa)</label>
         <div class="botonera"><button class="btn">Guardar</button><a class="btn fantasma" href="/panel">Cancelar</a></div>
       </form>
+      <% if (esPagina) { %>
+        <template id="plantilla-elemento">
+          <li class="elemento">
+            <div class="elemento-campos">
+              <input name="elemento_titulo" maxlength="120" placeholder="Título (por ejemplo: Horario)" aria-label="Título del enlace">
+              <input name="elemento_url" type="url" placeholder="https://…" aria-label="Dirección del enlace">
+            </div>
+            <div class="elemento-botones">
+              <button type="button" class="ic" data-mover="-1" title="Subir" aria-label="Subir"><svg class="i"><use href="#i-arriba"/></svg></button>
+              <button type="button" class="ic" data-mover="1" title="Bajar" aria-label="Bajar"><svg class="i"><use href="#i-abajo"/></svg></button>
+              <button type="button" class="ic" data-quitar title="Quitar" aria-label="Quitar"><svg class="i"><use href="#i-papelera"/></svg></button>
+            </div>
+          </li>
+        </template>
+      <% } %>
 
       <% if (usuario.admin) { %>
       <form class="formulario zona-peligro" method="post" action="/panel/enlaces/<%= e.id %>/dueno">
@@ -60,7 +141,7 @@
             data-confirmar-texto="Si está impreso en algún sitio, dejará de funcionar. Si solo quieres pararlo un tiempo, mejor quita «Activo»."
             data-confirmar-boton="Borrar">
         <p>Borrar es para siempre. Si solo quieres pararlo, quita «Activo».</p>
-        <button class="btn peligro peq">Borrar el enlace</button>
+        <button class="btn peligro peq"><%= esPagina ? 'Borrar la página' : 'Borrar el enlace' %></button>
       </form>
     </section>
   </div>

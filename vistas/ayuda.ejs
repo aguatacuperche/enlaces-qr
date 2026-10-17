@@ -1,0 +1,31 @@
+<%- include('parciales/cabeza', { titulo: 'Ayuda' }) %>
+<%- include('parciales/barra', { seccion: 'ayuda' }) %>
+<main class="cuerpo ayuda">
+  <h1>Qué se puede hacer aquí</h1>
+  <p class="entradilla"><%= dominio %> sirve para tener enlaces cortos y fáciles de escribir, y sus códigos QR, para circulares, carteles, el aula virtual o la agenda.</p>
+
+  <%- include('parciales/bienvenida-pasos') %>
+
+  <h2>Preguntas frecuentes</h2>
+  <details open><summary>¿Cómo creo un enlace?</summary>
+    <p>En «Mis enlaces», pega la dirección larga en «Nuevo enlace» y pulsa Crear. El nombre sale solo (cuatro letras que no se confunden, como <i>KXRT</i>); si prefieres uno tuyo, escríbelo encima antes de crear: minúsculas, números y guiones, como <i>excursion-museo</i>. Te avisa al momento si ya existe.</p></details>
+  <details><summary>¿Puedo cambiar adónde lleva un enlace que ya está impreso?</summary>
+    <p>Sí. Abre el enlace y cambia el destino: el QR y el cartel impresos llevarán al nuevo al instante. Lo que no conviene cambiar es el nombre, porque lo impreso dejaría de funcionar.</p></details>
+  <details><summary>¿Qué tamaños y formatos tiene el QR?</summary>
+    <p>En «QR, cartel y pegatinas» eliges colores, puntos, esquinas, el logo del centro en medio y un marco con texto. Se descarga como imagen (PNG o SVG), como PDF a tamaño de pegatina, folio o cartel, como <b>cartel</b> listo para colgar (con título y explicación) o como <b>hoja de pegatinas</b> para imprimir en hojas de etiquetas A4. Antes de descargar, la app lee el QR para comprobar que funciona.</p></details>
+  <details><summary>¿Cómo imprimo las pegatinas para que cuadren?</summary>
+    <p>Elige el formato de tu caja de etiquetas (viene en la caja: etiquetas por hoja y medidas). Imprime al <b>100 %</b>, sin «ajustar a la página». La primera vez, prueba en un folio normal con «Marcar los bordes» y ponlo a contraluz sobre la hoja de etiquetas. Si la hoja ya está empezada, indica en qué etiqueta empezar.</p></details>
+  <details><summary>¿Qué es una página?</summary>
+    <p>Un enlace que, en vez de llevar a un sitio, abre una página sencilla del centro con varios enlaces: todo lo de una clase, una excursión o una jornada detrás de un solo QR. Se crea con «Nueva página» y se rellena en su ficha (hasta <%= maxElementos %> enlaces, en el orden que quieras).</p></details>
+  <details><summary>¿Qué significan los avisos de «No abre» y «Revisar»?</summary>
+    <p>Una vez por semana se comprueba que los destinos siguen abriendo. <b>No abre</b>: la página ya no existe, da error o no responde; hay que cambiar el destino o pausar el enlace. <b>Revisar</b>: abre, pero pide iniciar sesión o es un formulario que ya no acepta respuestas. Si es lo que quieres (por ejemplo, un documento solo para cuentas del centro), pulsa «Dar por bueno». También puedes pulsar «Comprobar ahora» cuando lo hayas arreglado.</p></details>
+  <details><summary>¿Pausar, caducar o borrar?</summary>
+    <p><b>Pausar</b> (el interruptor de la lista) lo para hasta que lo vuelvas a activar. <b>Caducar</b> lo para solo a partir de una fecha. En los dos casos, quien lo abra verá una página del centro que lo explica. <b>Borrar</b> es para siempre.</p></details>
+  <details><summary>¿Qué se sabe de quien abre un enlace?</summary>
+    <p>Nada. Solo se cuenta cuántas veces se abre cada enlace al día; ni IP, ni cookies, ni ningún dato de la persona. Las vistas previas de WhatsApp y los buscadores no cuentan.</p></details>
+  <details><summary>¿Quién ve mis enlaces?</summary>
+    <p>Cada profesor ve y cambia los suyos. Los administradores ven todos, y pueden pasar los enlaces de un profesor a otro cuando alguien deja el centro.</p></details>
+  <details><summary>¿Importan las mayúsculas?</summary>
+    <p>No: <i><%= dominio %>/KXRT</i> y <i><%= dominio %>/kxrt</i> llevan al mismo sitio.</p></details>
+</main>
+<%- include('parciales/pie') %>

@@ -9,6 +9,8 @@ import { ruta } from './raiz.ts';
 import { ayudasVistas } from './ayudas-vistas.ts';
 import { cargarUsuario, rutasDeEntrada, sesiones } from './entrada.ts';
 import { rutasDelPanel } from './panel.ts';
+import { iniciarComprobaciones } from './comprobador.ts';
+import { elementosDe, enlacePorId } from './enlaces.ts';
 import { contarVisita, cuentaComoVisita, recargar, resolver } from './redireccion.ts';
 import { dibujarQR } from './qr/dibujo.ts';
 import { png } from './qr/exportar.ts';
@@ -38,7 +40,7 @@ export function crearApp(bd: Bd) {
       directives: {
         'default-src': ["'self'"], 'img-src': ["'self'", 'data:', 'blob:'], 'script-src': ["'self'"],
         'style-src': ["'self'", "'unsafe-inline'"], 'font-src': ["'self'"], 'form-action': ["'self'"],
-        'frame-ancestors': ["'none'"], 'upgrade-insecure-requests': config.produccion ? [] : null,
+        'frame-ancestors': ["'self'"], 'upgrade-insecure-requests': config.produccion ? [] : null,
       },
     },
     strictTransportSecurity: config.produccion,
@@ -74,7 +76,7 @@ export function crearApp(bd: Bd) {
   app.get(['/svg/:nombre', '/png/:nombre'], (req, res) => {
     const r = resolver(req.params.nombre as string);
     if (r.tipo === 'no-existe') return noEncontrado(res, r);
-    const nombre = r.tipo === 'ir' ? (req.params.nombre as string) : r.nombre;
+    const nombre = r.tipo === 'ir' || r.tipo === 'pagina' ? (req.params.nombre as string) : r.nombre;
     const svg = dibujarQR(urlCorta(nombre), leerOpciones({ marco: 'no' }), nombre);
     res.set('Cache-Control', 'public, max-age=3600');
     if (req.path.startsWith('/svg/')) res.type('image/svg+xml').send(svg);
@@ -82,13 +84,17 @@ export function crearApp(bd: Bd) {
   });
 
   // Lo principal: <dominio>/<nombre>.
-  app.get('/:nombre', (req, res) => {
+  app.get('/:nombre', async (req, res) => {
     const r = resolver(req.params.nombre as string);
-    if (r.tipo !== 'ir') return noEncontrado(res, r);
+    if (r.tipo !== 'ir' && r.tipo !== 'pagina') return noEncontrado(res, r);
     if (cuentaComoVisita(req.method, req.get('user-agent'))) {
       contarVisita(bd, r.id).catch(e => console.error('No se ha podido contar la visita:', e));
     }
-    res.set('Cache-Control', 'private, no-store').redirect(302, r.destino);
+    if (r.tipo === 'ir') return res.set('Cache-Control', 'private, no-store').redirect(302, r.destino);
+    // Una página con varios enlaces: se enseña aquí mismo.
+    const pagina = await enlacePorId(bd, r.id);
+    if (!pagina) return noEncontrado(res, { tipo: 'no-existe', nombre: req.params.nombre as string, parecido: null });
+    res.set('Cache-Control', 'private, no-store').render('pagina', { pagina, elementos: await elementosDe(bd, r.id) });
   });
 
   app.use((_req, res) => noEncontrado(res, { tipo: 'no-existe', nombre: '', parecido: null }));
@@ -112,6 +118,7 @@ export async function arrancar() {
   if (aplicadas.length) console.log('Migraciones aplicadas:', aplicadas.join(', '));
   await recargar(bd);
   setInterval(() => recargar(bd).catch(e => console.error('Recarga de enlaces:', e)), 60_000).unref();
+  iniciarComprobaciones(bd);
   const servidor = crearApp(bd).listen(config.puerto, () => console.log(`Escuchando en el puerto ${config.puerto} (${config.urlPublica})`));
   const parar = () => servidor.close(() => bd.end().then(() => process.exit(0)));
   process.on('SIGTERM', parar);
