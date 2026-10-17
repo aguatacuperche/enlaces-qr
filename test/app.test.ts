@@ -140,6 +140,14 @@ describe('entrada', () => {
     expect((await bd.query("select 1 from usuarios where correo = 'marta.diaz@colegio.example' and not admin")).rowCount).toBe(1);
   });
 
+  it('pide estilos y JavaScript con la huella de su contenido, para que una actualización se vea sin recargar', async () => {
+    const pagina = (await pedir('/')).texto;
+    const estilos = pagina.match(/href="(\/estaticos\/estilos\.css\?v=[0-9a-f]{10})"/)?.[1];
+    expect(estilos).toBeDefined();
+    expect(pagina).toMatch(/\/marca\/marca\.css\?v=[0-9a-f]{10}/);
+    expect((await pedir(estilos!)).tipo).toContain('text/css');
+  });
+
   it('el panel pide haber entrado', async () => {
     expect((await pedir('/panel')).destino).toBe('/');
   });

@@ -1,6 +1,8 @@
 /** La app web: entrada, panel de los profesores y, sobre todo, la redirección <dominio>/<nombre>. */
 import express, { type NextFunction, type Request, type Response } from 'express';
 import helmet from 'helmet';
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { config, urlCorta } from './config.ts';
@@ -52,6 +54,12 @@ export function crearApp(bd: Bd) {
   app.use('/estaticos', express.static(ruta('publico'), { maxAge: config.produccion ? '1d' : 0 }));
   // La marca del centro: colores y logos de la carpeta MARCA (ver src/marca.ts).
   const cssMarca = cssDeMarca();
+  // Las páginas piden estilos y JavaScript con una huella de su contenido (estilos.css?v=…): tras una actualización
+  // cambia la dirección y el navegador trae el fichero nuevo a la primera, sin que nadie tenga que recargar.
+  const huella = (contenido: string | Buffer) => createHash('sha256').update(contenido).digest('hex').slice(0, 10);
+  const huellas = new Map<string, string>([['marca.css', huella(cssMarca)]]);
+  for (const f of ['estilos.css', 'panel.js', 'qr.js']) huellas.set(f, huella(fs.readFileSync(ruta('publico', f))));
+  app.locals.recurso = (f: string) => `${f === 'marca.css' ? '/marca' : '/estaticos'}/${f}?v=${huellas.get(f) ?? ''}`;
   app.get('/marca/marca.css', (_req, res) => res.type('text/css').set('Cache-Control', 'public, max-age=3600').send(cssMarca));
   app.get(['/marca/logo.svg', '/marca/isotipo.svg'], (req, res) =>
     res.type('image/svg+xml').set('Cache-Control', 'public, max-age=3600').sendFile(ficheroDeMarca(req.path.endsWith('logo.svg') ? 'logo.svg' : 'isotipo.svg')));
