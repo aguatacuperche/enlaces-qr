@@ -54,7 +54,7 @@
         <td>
           <% if (u.con_problemas) { %>
             <span class="chip-problema roto"><svg class="i"><use href="#i-aviso"/></svg><%= u.con_problemas %></span>
-            <small class="informe-estado"><%= u.informe_enviado ? `Informe enviado el ${fechaCorta(u.informe_enviado)}` : 'Informe de este mes pendiente' %></small>
+            <small class="informe-estado"><%= u.ultimo_informe ? `Último informe: ${fechaCorta(u.ultimo_informe)}` : 'Aún no ha recibido el informe' %></small>
           <% } else { %><span class="chip-gris">Ninguno</span><% } %>
         </td>
         <td><%= u.ultima_entrada ? fechaCorta(u.ultima_entrada) : 'Aún no ha entrado' %></td>

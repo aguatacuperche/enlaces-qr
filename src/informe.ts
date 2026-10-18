@@ -2,8 +2,9 @@
  * Informe mensual por correo: a cada profesor que tenga enlaces que no abren (o avisos sin dar por buenos), la lista
  * de los suyos, con el motivo y el enlace a su ficha. Sale el primer lunes de cada mes a las 8:00 (hora del centro);
  * si ese día el servidor estaba parado, en cuanto vuelva, pero solo durante esa misma semana: instalar la app a mitad
- * de mes no dispara el informe de ese mes (pasó el 18 de octubre de 2026). Nunca dos veces el mismo mes, y solo
- * si desde su último informe ha aparecido algún problema nuevo: lo que sigue igual se ve en el panel, sin insistir.
+ * de mes no dispara el informe de ese mes (pasó el 18 de octubre de 2026). Una sola ronda al mes (rondas_informe):
+ * lo que se rompa después espera al mes siguiente. Y a cada uno, solo si desde su último informe ha aparecido algún
+ * problema nuevo: lo que sigue igual se ve en el panel, sin insistir.
  */
 import fs from 'node:fs';
 import resvg from '@resvg/resvg-js';
@@ -255,11 +256,15 @@ export async function enviarUno(cartero: Cartero, d: Destinatario, cx: Contexto,
   await cartero.enviar(correo);
 }
 
-/** Envía el informe del mes a quien le toque y no lo haya recibido ya. Devuelve cuántos se han enviado. */
+/**
+ * La ronda del mes: el informe a quien le toque y no lo haya recibido ya. Devuelve cuántos se han enviado.
+ * Si la ronda de ese mes ya está hecha, no envía nada.
+ */
 export async function enviarInformes(bd: Bd, cartero: Cartero, mes: string, cx: Contexto): Promise<number> {
+  if ((await bd.query('select 1 from rondas_informe where mes = $1', [mes])).rowCount) return 0;
   const { rows } = await bd.query<{ usuario_id: number }>('select usuario_id from informes where mes = $1', [mes]);
   const yaEnviados = new Set(rows.map(r => r.usuario_id));
-  let n = 0;
+  let n = 0, fallos = 0;
   for (const d of await destinatarios(bd)) {
     // Ya lo recibió este mes, o no hay nada nuevo desde el último: no se insiste.
     if (yaEnviados.has(d.id) || !d.enlaces.some(e => e.nuevo)) continue;
@@ -268,10 +273,12 @@ export async function enviarInformes(bd: Bd, cartero: Cartero, mes: string, cx: 
       await bd.query('insert into informes (usuario_id, mes, enlaces) values ($1, $2, $3) on conflict do nothing', [d.id, mes, d.enlaces.length]);
       n++;
     } catch (e) {
-      // Se reintenta en la siguiente vuelta (cada hora), dentro del mismo mes.
+      // La ronda queda abierta y se reintenta en la siguiente vuelta (cada hora), dentro de esa semana.
+      fallos++;
       console.error(`Informe mensual a ${d.correo}:`, (e as Error).message);
     }
   }
+  if (!fallos) await bd.query('insert into rondas_informe (mes) values ($1) on conflict do nothing', [mes]);
   return n;
 }
 

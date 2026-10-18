@@ -339,8 +339,9 @@ describe('ayuda e impresión', () => {
 
 describe('informe mensual por correo', () => {
 
-  it('le llega a quien tiene algo roto, una vez al mes como mucho, y nunca los avisos dados por buenos ni lo que no tiene dueño', async () => {
+  it('le llega a quien tiene algo roto, en una sola ronda al mes, y nunca los avisos dados por buenos ni lo que no tiene dueño', async () => {
     await bd.query('delete from informes');
+    await bd.query('delete from rondas_informe');
     const id = (correo: string) => bd.query<{ id: number }>('select id from usuarios where correo = $1', [correo]).then(r => r.rows[0].id);
     const luis = await id('luis.gomez@colegio.example'), marta = await id('marta.diaz@colegio.example');
     // Todo lo de antes, limpio; luego: Luis con uno roto; Marta con un aviso dado por bueno; uno roto sin dueño.
@@ -365,12 +366,16 @@ describe('informe mensual por correo', () => {
     // Repetir el mismo mes no envía nada; al mes siguiente, tampoco, si no ha aparecido nada nuevo.
     expect(await enviarInformes(bd, cartero, '2026-11', cx)).toBe(0);
     expect(await enviarInformes(bd, cartero, '2026-12', cx)).toBe(0);
-    // Un problema nuevo: sale el informe, con lo nuevo marcado.
+    // Algo que se rompe después de la ronda del mes espera a la del mes siguiente (y a Marta, que nunca ha recibido
+    // ninguno, tampoco le llega a mitad de mes).
     await new Promise(ok => setTimeout(ok, 20));
     await nuevo('informe-roto-2', luis, 'no-responde');
-    expect(await enviarInformes(bd, cartero, '2026-12', cx)).toBe(1);
+    await nuevo('informe-marta', marta, 'no-existe');
+    expect(await enviarInformes(bd, cartero, '2026-12', cx)).toBe(0);
+    expect(await enviarInformes(bd, cartero, '2027-01', cx)).toBe(2);
     // La copia en HTML (el .eml va codificado): el enlace nuevo, marcado y el primero de su grupo.
-    const html = readFileSync(`${CARPETA_CORREO}/${readdirSync(CARPETA_CORREO).filter(f => f.endsWith('.html')).sort().at(-1)!}`, 'utf8');
+    const html = readdirSync(CARPETA_CORREO).filter(f => f.endsWith('.html')).map(f => readFileSync(`${CARPETA_CORREO}/${f}`, 'utf8'))
+      .find(h => h.includes('informe-roto-2'))!;
     expect(html).toContain('NUEVO');
     expect(html.indexOf('informe-roto-2')).toBeLessThan(html.indexOf('>informe-roto<'));
   });
@@ -384,5 +389,6 @@ describe('informe mensual por correo', () => {
     const usuarios = (await pedir('/panel/usuarios', { galleta: luis })).texto;
     expect(usuarios).toContain('Informe mensual por correo');
     expect(usuarios).toContain('fila-rota');
+    expect(usuarios).toContain('Último informe:');
   });
 });

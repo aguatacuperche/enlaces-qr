@@ -290,7 +290,7 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
   r.get('/usuarios', exigirAdmin, async (req, res) => {
     const { mes } = momento();
     res.render('usuarios', {
-      usuarios: await listarUsuarios(bd, mes), sinDueno: (await recuento(bd, { usuarioId: null })).todos, hecho: req.query.hecho,
+      usuarios: await listarUsuarios(bd), sinDueno: (await recuento(bd, { usuarioId: null })).todos, hecho: req.query.hecho,
       informe: { correo: !!cartero, apagado: process.env.INFORME_MENSUAL === 'no', remitente: cartero?.remitente ?? '', proximo: proximoEnvio(), mes },
       prueba: texto(req.query.prueba),
     });
