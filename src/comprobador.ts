@@ -27,8 +27,10 @@ export async function guardarResultado(bd: Bd, enlaceId: number, p: Problema | n
 }
 
 export async function guardarResultadoElemento(bd: Bd, elementoId: number, p: Problema | null): Promise<void> {
-  await bd.query('update elementos set comprobado = now(), problema = $2, problema_detalle = $3 where id = $1',
-    [elementoId, p?.codigo ?? null, p?.detalle ?? null]);
+  await bd.query(
+    `update elementos set comprobado = now(), problema = $2, problema_detalle = $3,
+       problema_desde = case when $2::text is null then null when problema is distinct from $2 then now() else problema_desde end
+     where id = $1`, [elementoId, p?.codigo ?? null, p?.detalle ?? null]);
 }
 
 /** Comprueba ya un enlace (o todos los de una página). Para el botón «Comprobar ahora». */

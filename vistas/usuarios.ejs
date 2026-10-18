@@ -5,6 +5,28 @@
   <% if (hecho !== undefined) { %><p class="aviso bien" role="status"><%= hecho === '1' ? 'Se ha pasado 1 enlace.' : `Se han pasado ${hecho} enlaces.` %></p><% } %>
   <p style="color:var(--tinta-2);margin-top:0">Se dan de alta solos la primera vez que entran con su cuenta del centro. Las cuentas excluidas (las de los alumnos, por ejemplo) no pueden entrar.</p>
 
+  <% const avisosPrueba = {
+       enviada: ['bien', 'Te hemos enviado el informe tal como te llegaría. Míralo en tu correo.'],
+       ejemplo: ['bien', 'No tienes enlaces con problemas, así que te hemos enviado un informe de ejemplo con enlaces de otros profesores.'],
+       nada: ['bien', 'Ningún enlace del centro tiene problemas ahora mismo: no hay nada que enviar.'],
+       'sin-correo': ['mal', 'El envío de correo no está configurado en el servidor (SMTP_USUARIO y SMTP_CONTRASENA).'],
+       error: ['mal', 'No se ha podido enviar. Revisa la configuración del correo en el servidor.'],
+     }; const ap = avisosPrueba[prueba]; %>
+  <% if (ap) { %><p class="aviso <%= ap[0] %>" role="status"><%= ap[1] %></p><% } %>
+  <section class="tarjeta informe-mensual" style="margin-bottom:18px">
+    <div>
+      <h2>Informe mensual por correo</h2>
+      <% if (!informe.correo) { %>
+        <p>Desactivado: falta configurar el correo en el servidor (SMTP_USUARIO y SMTP_CONTRASENA).</p>
+      <% } else if (informe.apagado) { %>
+        <p>Desactivado en la configuración del servidor (INFORME_MENSUAL=no). La prueba sí se puede enviar, desde <b><%= informe.remitente %></b>.</p>
+      <% } else { %>
+        <p>A cada profesor con enlaces que no abren le llega la lista de los suyos el primer lunes de cada mes a las 8:00. Sale de <b><%= informe.remitente %></b>. Próximo envío: <b><%= fechaLarga(informe.proximo) %></b>.</p>
+      <% } %>
+    </div>
+    <form method="post" action="/panel/usuarios/informe-prueba"><button class="btn suave peq" <%= informe.correo ? '' : 'disabled' %>>Enviarme una prueba</button></form>
+  </section>
+
   <section class="tarjeta" style="margin-bottom:18px">
     <form class="pasar" method="post" action="/panel/usuarios/pasar">
       <b>Pasar todos los enlaces de</b>
@@ -22,13 +44,19 @@
   </section>
 
   <table class="lista usuarios">
-    <thead><tr><th>Nombre</th><th>Correo</th><th>Enlaces</th><th>Última entrada</th><th>Administrador</th></tr></thead>
+    <thead><tr><th>Nombre</th><th>Correo</th><th>Enlaces</th><th>Con problemas</th><th>Última entrada</th><th>Administrador</th></tr></thead>
     <tbody>
     <% for (const u of usuarios) { %>
-      <tr>
+      <tr class="<%= u.con_problemas ? 'fila-rota' : '' %>">
         <td class="nom"><b><%= u.nombre %></b></td>
         <td><%= u.correo %></td>
         <td><%= u.enlaces %></td>
+        <td>
+          <% if (u.con_problemas) { %>
+            <span class="chip-problema roto"><svg class="i"><use href="#i-aviso"/></svg><%= u.con_problemas %></span>
+            <small class="informe-estado"><%= u.informe_enviado ? `Informe enviado el ${fechaCorta(u.informe_enviado)}` : 'Informe de este mes pendiente' %></small>
+          <% } else { %><span class="chip-gris">Ninguno</span><% } %>
+        </td>
         <td><%= u.ultima_entrada ? fechaCorta(u.ultima_entrada) : 'Aún no ha entrado' %></td>
         <td>
           <% if (u.id === usuario.id) { %>

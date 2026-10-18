@@ -12,12 +12,15 @@ import { ayudasVistas } from './ayudas-vistas.ts';
 import { cargarUsuario, rutasDeEntrada, sesiones } from './entrada.ts';
 import { rutasDelPanel } from './panel.ts';
 import { iniciarComprobaciones } from './comprobador.ts';
+import { crearCartero, type Cartero } from './correo.ts';
+import { contexto, iniciarInformes } from './informe.ts';
 import { elementosDe, enlacePorId } from './enlaces.ts';
 import { contarVisita, cuentaComoVisita, recargar, resolver } from './redireccion.ts';
 import { dibujarQR } from './qr/dibujo.ts';
 import { png } from './qr/exportar.ts';
 import { leerOpciones } from './qr/opciones.ts';
-import { cssDeMarca, ficheroDeMarca } from './marca.ts';
+import { cargarMarca, cssDeMarca, ficheroDeMarca } from './marca.ts';
+import { pngEslabonRoto } from './ilustracion.ts';
 
 const require = createRequire(import.meta.url);
 
@@ -29,7 +32,7 @@ function mismoOrigen(req: Request, res: Response, next: NextFunction) {
   res.status(403).send('Petición rechazada.');
 }
 
-export function crearApp(bd: Bd) {
+export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.env, new URL(config.urlPublica).host)) {
   const app = express();
   app.set('trust proxy', 1);
   app.set('views', ruta('vistas'));
@@ -63,6 +66,9 @@ export function crearApp(bd: Bd) {
   app.get('/marca/marca.css', (_req, res) => res.type('text/css').set('Cache-Control', 'public, max-age=3600').send(cssMarca));
   app.get(['/marca/logo.svg', '/marca/isotipo.svg'], (req, res) =>
     res.type('image/svg+xml').set('Cache-Control', 'public, max-age=3600').sendFile(ficheroDeMarca(req.path.endsWith('logo.svg') ? 'logo.svg' : 'isotipo.svg')));
+  // El dibujo tenue de la cabecera del informe por correo (eslabón partido), con los colores de la marca.
+  const fondoInforme = pngEslabonRoto(cargarMarca().colores);
+  app.get('/marca/fondo-informe.png', (_req, res) => res.type('image/png').set('Cache-Control', 'public, max-age=86400').send(fondoInforme));
   app.get('/favicon.ico', (_req, res) => res.redirect(301, '/marca/isotipo.svg'));
   app.get('/robots.txt', (_req, res) => res.type('text').send('User-agent: *\nDisallow: /\n'));
   // El QR decorativo de la pantalla de entrada.
@@ -78,7 +84,7 @@ export function crearApp(bd: Bd) {
   app.use(['/entrar', '/auth', '/salir', '/panel'], conSesion);
   app.get('/', conSesion);
   app.use(rutasDeEntrada(bd));
-  app.use('/panel', rutasDelPanel(bd));
+  app.use('/panel', rutasDelPanel(bd, cartero));
 
   // Como en la app anterior: /svg/<nombre> y /png/<nombre> dan el QR, por si alguien los tiene enlazados.
   app.get(['/svg/:nombre', '/png/:nombre'], (req, res) => {
@@ -127,7 +133,10 @@ export async function arrancar() {
   await recargar(bd);
   setInterval(() => recargar(bd).catch(e => console.error('Recarga de enlaces:', e)), 60_000).unref();
   iniciarComprobaciones(bd);
-  const servidor = crearApp(bd).listen(config.puerto, () => console.log(`Escuchando en el puerto ${config.puerto} (${config.urlPublica})`));
+  const cartero = crearCartero(process.env, new URL(config.urlPublica).host);
+  if (cartero) console.log(`Correo: ${cartero.descripcion}.`);
+  iniciarInformes(bd, cartero, () => contexto(config.urlPublica, config.centro.pie));
+  const servidor = crearApp(bd, cartero).listen(config.puerto, () => console.log(`Escuchando en el puerto ${config.puerto} (${config.urlPublica})`));
   const parar = () => servidor.close(() => bd.end().then(() => process.exit(0)));
   process.on('SIGTERM', parar);
   process.on('SIGINT', parar);

@@ -15,11 +15,18 @@ process.env.CORREOS_EXCLUIDOS = '\\d';
 // La comprobación de destinos se prueba contra un servidor local y sin la ronda periódica.
 process.env.COMPROBAR_RED_INTERNA = 'si';
 process.env.COMPROBAR_ENLACES = 'no';
+// Los correos se guardan en una carpeta en vez de enviarse.
+const { mkdtempSync, readdirSync, readFileSync } = await import('node:fs');
+const { tmpdir } = await import('node:os');
+const CARPETA_CORREO = mkdtempSync(`${tmpdir()}/enlaces-correo-`);
+process.env.CORREO_A_CARPETA = CARPETA_CORREO;
 process.env.DATABASE_URL = process.env.DATABASE_URL_PRUEBAS ?? 'postgres://enlaces:enlaces@localhost:5433/enlaces_pruebas';
 
 const { conectar, migrar } = await import('../src/db.ts');
 const { crearApp } = await import('../src/servidor.ts');
 const { recargar } = await import('../src/redireccion.ts');
+const { enviarInformes, contexto } = await import('../src/informe.ts');
+const { crearCartero } = await import('../src/correo.ts');
 
 const bd = conectar(process.env.DATABASE_URL);
 let servidor: Server;
@@ -146,6 +153,7 @@ describe('entrada', () => {
     expect(estilos).toBeDefined();
     expect(pagina).toMatch(/\/marca\/marca\.css\?v=[0-9a-f]{10}/);
     expect((await pedir(estilos!)).tipo).toContain('text/css');
+    expect((await pedir('/marca/fondo-informe.png')).tipo).toContain('image/png');
   });
 
   it('el panel pide haber entrado', async () => {
@@ -326,5 +334,55 @@ describe('ayuda e impresión', () => {
     expect((await pedir(`${base}/pegatinas.pdf?hoja=medida&m_columnas=9&m_ancho=60`, { galleta: g })).estado).toBe(422);
     const marta = await entrarComo('marta.diaz@colegio.example');
     expect((await pedir(`${base}/cartel.pdf`, { galleta: marta })).estado).toBe(404);
+  });
+});
+
+describe('informe mensual por correo', () => {
+
+  it('le llega a quien tiene algo roto, una vez al mes como mucho, y nunca los avisos dados por buenos ni lo que no tiene dueño', async () => {
+    await bd.query('delete from informes');
+    const id = (correo: string) => bd.query<{ id: number }>('select id from usuarios where correo = $1', [correo]).then(r => r.rows[0].id);
+    const luis = await id('luis.gomez@colegio.example'), marta = await id('marta.diaz@colegio.example');
+    // Todo lo de antes, limpio; luego: Luis con uno roto; Marta con un aviso dado por bueno; uno roto sin dueño.
+    await bd.query('update enlaces set problema = null, aviso_ignorado = false');
+    await bd.query('delete from elementos');
+    const nuevo = (nombre: string, dueno: number | null, problema: string, ignorado = false) => bd.query(
+      `insert into enlaces (nombre, destino, titulo, usuario_id, problema, problema_detalle, problema_desde, aviso_ignorado)
+       values ($1, 'https://colegio.example/x', $1, $2, $3, 'Detalle de prueba.', now(), $4)`, [nombre, dueno, problema, ignorado]);
+    await nuevo('informe-roto', luis, 'no-existe');
+    await nuevo('informe-aviso', marta, 'pide-sesion', true);
+    await nuevo('informe-huerfano', null, 'no-existe');
+
+    const cartero = crearCartero({ CORREO_A_CARPETA: CARPETA_CORREO }, 'enlaces')!;
+    const cx = contexto(BASE, 'Colegio Ejemplo');
+    const antes = readdirSync(CARPETA_CORREO).length;
+    expect(await enviarInformes(bd, cartero, '2026-11', cx)).toBe(1);
+    const nuevos = readdirSync(CARPETA_CORREO).filter(f => f.endsWith('.eml')).sort().slice(-1);
+    const eml = readFileSync(`${CARPETA_CORREO}/${nuevos[0]}`, 'utf8');
+    expect(eml).toContain('luis.gomez@colegio.example');
+    expect(eml).not.toContain('informe-huerfano');
+    expect(readdirSync(CARPETA_CORREO).length).toBe(antes + 2);  // .eml y .html
+    // Repetir el mismo mes no envía nada; al mes siguiente, tampoco, si no ha aparecido nada nuevo.
+    expect(await enviarInformes(bd, cartero, '2026-11', cx)).toBe(0);
+    expect(await enviarInformes(bd, cartero, '2026-12', cx)).toBe(0);
+    // Un problema nuevo: sale el informe, con lo nuevo marcado.
+    await new Promise(ok => setTimeout(ok, 20));
+    await nuevo('informe-roto-2', luis, 'no-responde');
+    expect(await enviarInformes(bd, cartero, '2026-12', cx)).toBe(1);
+    // La copia en HTML (el .eml va codificado): el enlace nuevo, marcado y el primero de su grupo.
+    const html = readFileSync(`${CARPETA_CORREO}/${readdirSync(CARPETA_CORREO).filter(f => f.endsWith('.html')).sort().at(-1)!}`, 'utf8');
+    expect(html).toContain('NUEVO');
+    expect(html.indexOf('informe-roto-2')).toBeLessThan(html.indexOf('>informe-roto<'));
+  });
+
+  it('un administrador puede enviarse una prueba, y en Usuarios se ve quién tiene enlaces rotos', async () => {
+    const luis = await entrarComo('luis.gomez@colegio.example');
+    const r = await pedir('/panel/usuarios/informe-prueba', { galleta: luis, cuerpo: {} });
+    expect(r.destino).toBe('/panel/usuarios?prueba=enviada');
+    const ultimo = readdirSync(CARPETA_CORREO).filter(f => f.endsWith('.eml')).sort().at(-1)!;
+    expect(readFileSync(`${CARPETA_CORREO}/${ultimo}`, 'utf8')).toMatch(/\[Prueba\]/);
+    const usuarios = (await pedir('/panel/usuarios', { galleta: luis })).texto;
+    expect(usuarios).toContain('Informe mensual por correo');
+    expect(usuarios).toContain('fila-rota');
   });
 });

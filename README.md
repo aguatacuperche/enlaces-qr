@@ -24,6 +24,9 @@ les sacan un QR con los colores del centro y ven cuántas visitas tienen.
 - **Aviso de enlaces que no abren**: una vez por semana se comprueba cada destino. Si ya no existe, da error o no
   responde, sale marcado en el panel; si pide iniciar sesión en Google o es un formulario cerrado, sale como aviso que
   el dueño puede dar por bueno. No se comprueban direcciones de la red interna.
+- **Informe mensual por correo**: el primer lunes de cada mes, a cada profesor con enlaces que no abren le llega la
+  lista de los suyos, con el motivo y el enlace a su ficha. Nunca dos veces el mismo mes; si el servidor estaba parado
+  ese día, sale en cuanto vuelve. Por SMTP (por ejemplo, el de Google Workspace con una contraseña de aplicación).
 - **Ayuda**: una tarjeta de bienvenida la primera vez y una página con las dudas frecuentes.
 - **Visitas sin datos personales**: un contador por enlace y día, sin IP, sin cookies y sin nada de quien visita. No
   cuentan los robots ni las vistas previas de WhatsApp y similares.
@@ -48,6 +51,8 @@ src/
   marca.ts          colores y logos del centro
   comprobacion.ts   ¿sigue abriendo un destino?
   comprobador.ts    la ronda semanal de comprobaciones
+  informe.ts        el informe mensual por correo (quién, qué y cuándo)
+  correo.ts         envío por SMTP, o a una carpeta en desarrollo
   migracion.ts      qué se migra de la app anterior y cómo
   qr/               dibujo del QR (SVG), PNG, PDF, cartel, pegatinas y comprobación de lectura
 vistas/             plantillas EJS

@@ -292,6 +292,20 @@ h1, h2, h3, h4 { line-height: 1.2; }
 .problema form { margin-top: 8px; }
 .enlace-texto { border: 0; background: none; padding: 0; color: var(--principal); font-weight: 800; font-size: 13.5px; text-decoration: underline; cursor: pointer; }
 
+/* Filas con algo que revisar, destacadas en la lista de enlaces y en la de usuarios. */
+.lista tr.fila-rota td { background: color-mix(in srgb, var(--tercero) 5%, white); }
+.lista tr.fila-rota td:first-child { box-shadow: inset 4px 0 0 var(--tercero); }
+.lista tr.fila-aviso td { background: color-mix(in srgb, var(--acento) 9%, white); }
+.lista tr.fila-aviso td:first-child { box-shadow: inset 4px 0 0 var(--acento); }
+.lista tr.fila-rota:hover td { background: color-mix(in srgb, var(--tercero) 9%, white); }
+.lista tr.fila-aviso:hover td { background: color-mix(in srgb, var(--acento) 14%, white); }
+.informe-estado { display: block; color: var(--tenue); font-size: 12px; margin-top: 3px; }
+.informe-mensual { display: flex; align-items: center; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
+.informe-mensual h2 { font-size: 16px; margin: 0 0 4px; }
+.informe-mensual p { margin: 0; color: var(--tinta-2); font-size: 14.5px; max-width: 720px; }
+.informe-mensual form { margin: 0; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
 /* ---------- Páginas ---------- */
 .ficha.de-pagina { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
 .campo textarea { border: 0; outline: 0; color: var(--tinta); flex: 1; min-width: 0; background: transparent; font: inherit; resize: vertical; }
@@ -357,6 +371,9 @@ h1, h2, h3, h4 { line-height: 1.2; }
   .lista td.nom { grid-column: 1 / -1; min-width: 0; }
   .lista td.col-destino { display: none; }
   .lista td.col-acciones { grid-column: 2; grid-row: 2 / span 2; align-self: center; }
+  .lista tr.fila-rota { box-shadow: inset 4px 0 0 var(--tercero); }
+  .lista tr.fila-aviso { box-shadow: inset 4px 0 0 var(--acento); }
+  .lista tr.fila-rota td:first-child, .lista tr.fila-aviso td:first-child { box-shadow: none; }
   .herramientas .derecha { margin-left: 0; }
   .entrada { grid-template-columns: 1fr; }
   .entrada-arte { display: none; }

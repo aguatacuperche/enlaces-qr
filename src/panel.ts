@@ -18,6 +18,8 @@ import { dibujarQR } from './qr/dibujo.ts';
 import { pdf, png, seLee } from './qr/exportar.ts';
 import { aConsulta, leerOpciones, pixelesDe, POR_DEFECTO, TAMANOS, type Opciones } from './qr/opciones.ts';
 import { cartel, HOJAS, pegatinas, problemaConHoja, type Hoja } from './qr/impresion.ts';
+import type { Cartero } from './correo.ts';
+import { contexto, destinatarios, enviarUno, momento, proximoEnvio } from './informe.ts';
 
 /** La hoja de pegatinas pedida: uno de los formatos habituales o una a medida (campos m_*). */
 function hojaDesde(q: Request['query']): { hoja: Hoja; problema: string | null } {
@@ -66,7 +68,7 @@ function filtroDesde(q: Request['query']): Filtro {
   };
 }
 
-export function rutasDelPanel(bd: Bd) {
+export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
   const r = express.Router();
   r.use(exigirUsuario);
 
@@ -285,8 +287,30 @@ export function rutasDelPanel(bd: Bd) {
 
   // ---------- Usuarios (administradores) ----------
 
-  r.get('/usuarios', exigirAdmin, async (_req, res) => {
-    res.render('usuarios', { usuarios: await listarUsuarios(bd), sinDueno: (await recuento(bd, { usuarioId: null })).todos, hecho: _req.query.hecho });
+  r.get('/usuarios', exigirAdmin, async (req, res) => {
+    const { mes } = momento();
+    res.render('usuarios', {
+      usuarios: await listarUsuarios(bd, mes), sinDueno: (await recuento(bd, { usuarioId: null })).todos, hecho: req.query.hecho,
+      informe: { correo: !!cartero, apagado: process.env.INFORME_MENSUAL === 'no', remitente: cartero?.remitente ?? '', proximo: proximoEnvio(), mes },
+      prueba: texto(req.query.prueba),
+    });
+  });
+
+  /** El informe tal como le llegaría a este administrador; si no tiene nada roto, con enlaces de ejemplo del centro. */
+  r.post('/usuarios/informe-prueba', exigirAdmin, async (_req, res) => {
+    const u = usuarioDe(res);
+    if (!cartero) return res.redirect('/panel/usuarios?prueba=sin-correo');
+    const todos = await destinatarios(bd);
+    const propio = todos.find(d => d.id === u.id);
+    const enlaces = propio?.enlaces ?? todos.flatMap(d => d.enlaces).slice(0, 5);
+    if (!enlaces.length) return res.redirect('/panel/usuarios?prueba=nada');
+    try {
+      await enviarUno(cartero, { id: u.id, correo: u.correo, nombre: u.nombre, enlaces }, contexto(config.urlPublica, config.centro.pie), true);
+      res.redirect(`/panel/usuarios?prueba=${propio ? 'enviada' : 'ejemplo'}`);
+    } catch (e) {
+      console.error('Informe de prueba:', e);
+      res.redirect('/panel/usuarios?prueba=error');
+    }
   });
 
   r.post('/usuarios/:id/admin', exigirAdmin, async (req, res) => {

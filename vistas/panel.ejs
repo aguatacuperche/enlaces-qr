@@ -79,7 +79,8 @@
     <thead><tr><th>Enlace</th><th>Enlace corto</th><th>Destino</th><% if (vista === 'todos') { %><th>Dueño</th><% } %><th>Visitas</th><th>Estado</th><th><span class="oculto">Acciones</span></th></tr></thead>
     <tbody>
     <% for (const e of enlaces) { const estado = estadoDe(e); const [sw, txt] = ESTADOS[estado]; %>
-      <tr class="<%= e.id === recienCreado ? 'recien' : '' %>">
+      <% const mal = (e.problema && !e.aviso_ignorado) || e.elementos_mal; const grave = e.elementos_mal || (e.problema && !esAviso(e.problema)); %>
+      <tr class="<%= e.id === recienCreado ? 'recien' : '' %> <%= mal && estado === 'activo' ? (grave ? 'fila-rota' : 'fila-aviso') : '' %>">
         <td class="nom">
           <a href="/panel/enlaces/<%= e.id %>"><%= e.titulo %></a>
           <div class="chips">
