@@ -1,7 +1,8 @@
 /**
  * Informe mensual por correo: a cada profesor que tenga enlaces que no abren (o avisos sin dar por buenos), la lista
  * de los suyos, con el motivo y el enlace a su ficha. Sale el primer lunes de cada mes a las 8:00 (hora del centro);
- * si ese día el servidor estaba parado, en cuanto vuelva, dentro del mismo mes. Nunca dos veces el mismo mes, y solo
+ * si ese día el servidor estaba parado, en cuanto vuelva, pero solo durante esa misma semana: instalar la app a mitad
+ * de mes no dispara el informe de ese mes (pasó el 18 de octubre de 2026). Nunca dos veces el mismo mes, y solo
  * si desde su último informe ha aparecido algún problema nuevo: lo que sigue igual se ve en el panel, sin insistir.
  */
 import fs from 'node:fs';
@@ -28,7 +29,7 @@ export type Contexto = { dominio: string; urlPublica: string; pie: string; color
 
 // ---------------------------------------------------------------- Cuándo toca
 
-/** «2026-11» y si ya ha llegado el momento de enviar el de ese mes. */
+/** «2026-11» y si es momento de enviar el de ese mes: del primer lunes a las 8:00 hasta el domingo siguiente. */
 export function momento(ahora = new Date(), zona = ZONA): { mes: string; toca: boolean } {
   const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
     timeZone: zona, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
@@ -36,7 +37,8 @@ export function momento(ahora = new Date(), zona = ZONA): { mes: string; toca: b
   const ano = Number(p.year), mes = Number(p.month), dia = Number(p.day), hora = Number(p.hour);
   const diaSemanaDel1 = new Date(Date.UTC(ano, mes - 1, 1)).getUTCDay();  // 0 domingo … 6 sábado
   const primerLunes = 1 + (8 - diaSemanaDel1) % 7;
-  return { mes: `${ano}-${p.month}`, toca: dia > primerLunes || (dia === primerLunes && hora >= HORA) };
+  const toca = (dia > primerLunes && dia < primerLunes + 7) || (dia === primerLunes && hora >= HORA);
+  return { mes: `${ano}-${p.month}`, toca };
 }
 
 /** Día del próximo envío, para enseñarlo en el panel. */

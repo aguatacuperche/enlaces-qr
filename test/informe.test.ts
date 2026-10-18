@@ -12,8 +12,12 @@ describe('cuándo sale el informe', () => {
     expect(en('2026-12-06T12:00:00Z').toca).toBe(false);
     expect(en('2026-12-07T08:30:00Z')).toEqual({ mes: '2026-12', toca: true });
   });
-  it('si el servidor estaba parado ese lunes, sale en cuanto vuelve, dentro del mismo mes', () => {
-    expect(en('2026-11-20T03:00:00Z')).toEqual({ mes: '2026-11', toca: true });
+  it('si el servidor estaba parado ese lunes, sale en cuanto vuelve, pero solo esa misma semana', () => {
+    expect(en('2026-11-05T03:00:00Z')).toEqual({ mes: '2026-11', toca: true });
+    expect(en('2026-11-08T23:00:00Z').toca).toBe(true);
+    // Instalarla a mitad de mes no dispara el informe de ese mes.
+    expect(en('2026-11-09T09:00:00Z').toca).toBe(false);
+    expect(en('2026-10-18T09:00:00Z').toca).toBe(false);
   });
   it('usa la hora del centro, no la del servidor', () => {
     // A las 7:30 en Lisboa (horario de verano, UTC+1) ya son las 8:30 en Madrid.
