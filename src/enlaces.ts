@@ -223,7 +223,10 @@ export async function cambiarActivo(bd: Bd, id: number, activo: boolean): Promis
 }
 
 export async function cambiarDueno(bd: Bd, id: number, usuarioId: number | null): Promise<void> {
-  await bd.query('update enlaces set usuario_id = $2, actualizado = now() where id = $1', [id, usuarioId]);
+  await bd.query(
+    `update enlaces set usuario_id = $2, actualizado = now(),
+       dueno_desde = case when usuario_id is distinct from $2 then now() else dueno_desde end
+     where id = $1`, [id, usuarioId]);
 }
 
 export async function borrarEnlace(bd: Bd, id: number): Promise<void> {

@@ -56,16 +56,17 @@ export function proximoEnvio(ahora = new Date(), zona = ZONA): Date {
 // ---------------------------------------------------------------- Quién recibe qué
 
 export async function destinatarios(bd: Bd): Promise<Destinatario[]> {
-  // «Nuevo»: el problema empezó después del último informe que recibió el dueño (o nunca recibió ninguno).
+  // «Nuevo»: el problema empezó, o el enlace pasó a ser suyo, después del último informe que recibió el dueño
+  // (o nunca recibió ninguno). greatest() no tiene en cuenta los null.
   const { rows } = await bd.query<EnlaceDelInforme & { usuario_id: number; correo: string; dueno: string; ya_recibio: boolean }>(
     `select e.id, e.tipo, e.nombre, e.titulo, e.problema, e.problema_detalle, e.usuario_id, u.correo, u.nombre as dueno,
             e.visitas_anteriores + coalesce((select sum(total) from visitas v where v.enlace_id = e.id), 0)::int as visitas,
             coalesce((select json_agg(json_build_object('titulo', x.titulo, 'problema_detalle', x.problema_detalle,
-                        'nuevo', i.ultimo is null or x.problema_desde > i.ultimo) order by x.posicion)
+                        'nuevo', i.ultimo is null or greatest(x.problema_desde, e.dueno_desde) > i.ultimo) order by x.posicion)
                       from elementos x where x.pagina_id = e.id and x.problema is not null), '[]') as elementos,
-            (e.problema is not null and not e.aviso_ignorado and (i.ultimo is null or e.problema_desde > i.ultimo))
+            (e.problema is not null and not e.aviso_ignorado and (i.ultimo is null or greatest(e.problema_desde, e.dueno_desde) > i.ultimo))
               or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null
-                           and (i.ultimo is null or x.problema_desde > i.ultimo)) as nuevo,
+                           and (i.ultimo is null or greatest(x.problema_desde, e.dueno_desde) > i.ultimo)) as nuevo,
             i.ultimo is not null as ya_recibio
      from enlaces e join usuarios u on u.id = e.usuario_id
      left join lateral (select max(enviado) as ultimo from informes where usuario_id = u.id) i on true

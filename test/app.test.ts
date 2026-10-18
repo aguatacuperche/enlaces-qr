@@ -27,6 +27,7 @@ const { crearApp } = await import('../src/servidor.ts');
 const { recargar } = await import('../src/redireccion.ts');
 const { enviarInformes, contexto } = await import('../src/informe.ts');
 const { crearCartero } = await import('../src/correo.ts');
+const { cambiarDueno } = await import('../src/enlaces.ts');
 
 const bd = conectar(process.env.DATABASE_URL);
 let servidor: Server;
@@ -378,6 +379,34 @@ describe('informe mensual por correo', () => {
       .find(h => h.includes('informe-roto-2'))!;
     expect(html).toContain('NUEVO');
     expect(html.indexOf('informe-roto-2')).toBeLessThan(html.indexOf('>informe-roto<'));
+  });
+
+  it('un enlace con problemas que cambia de dueño es nuevo para quien lo recibe, aunque ya haya tenido informe', async () => {
+    await bd.query('delete from informes');
+    await bd.query('delete from rondas_informe');
+    await bd.query('update enlaces set problema = null, aviso_ignorado = false');
+    const id = (correo: string) => bd.query<{ id: number }>('select id from usuarios where correo = $1', [correo]).then(r => r.rows[0].id);
+    const luis = await id('luis.gomez@colegio.example'), marta = await id('marta.diaz@colegio.example');
+    const roto = (nombre: string, dueno: number) => bd.query<{ id: number }>(
+      `insert into enlaces (nombre, destino, titulo, usuario_id, problema, problema_detalle, problema_desde)
+       values ($1, 'https://colegio.example/x', $1, $2, 'no-existe', 'Detalle de prueba.', now()) returning id`, [nombre, dueno])
+      .then(r => r.rows[0].id);
+    await roto('traspaso-de-luis', luis);
+    const pasa = await roto('traspaso-que-pasa', luis);
+    await roto('traspaso-de-marta', marta);
+    const cartero = crearCartero({ CORREO_A_CARPETA: CARPETA_CORREO }, 'enlaces')!;
+    const cx = contexto(BASE, 'Colegio Ejemplo');
+    expect(await enviarInformes(bd, cartero, '2027-02', cx)).toBe(2);
+
+    // Luis le pasa uno a Marta: al mes siguiente, a ella le llega (marcado como nuevo); a Luis, nada.
+    await new Promise(ok => setTimeout(ok, 20));
+    await cambiarDueno(bd, pasa, marta);
+    expect(await enviarInformes(bd, cartero, '2027-03', cx)).toBe(1);
+    const html = readdirSync(CARPETA_CORREO).filter(f => f.endsWith('.html')).map(f => readFileSync(`${CARPETA_CORREO}/${f}`, 'utf8'))
+      .filter(h => h.includes('traspaso-que-pasa') && h.includes('NUEVO'));
+    expect(html).toHaveLength(1);
+    expect(html[0]).toContain('traspaso-de-marta');
+    expect(html[0]).not.toContain('traspaso-de-luis');
   });
 
   it('un administrador puede enviarse una prueba, y en Usuarios se ve quién tiene enlaces rotos', async () => {
