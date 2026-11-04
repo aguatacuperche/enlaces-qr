@@ -2,9 +2,13 @@
 
 const ZONA = process.env.ZONA_HORARIA || 'Europe/Madrid';
 
+// Uno solo para toda la app: crear un Intl.DateTimeFormat pesa unos 30 KB de memoria nativa que el recolector no ve, y
+// hoy() se llama por cada enlace en cada dirección que no existe. Con robots probando rutas, eso tumbaba el contenedor.
+const formatoHoy = new Intl.DateTimeFormat('en-CA', { timeZone: ZONA });
+
 /** Hoy como AAAA-MM-DD. */
 export function hoy(ahora = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: ZONA }).format(ahora);
+  return formatoHoy.format(ahora);
 }
 
 /** Suma días a una fecha AAAA-MM-DD. */
