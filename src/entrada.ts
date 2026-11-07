@@ -19,6 +19,7 @@ declare module 'express-session' {
 }
 
 const TREINTA_DIAS = 30 * 24 * 3600 * 1000;
+const DIEZ_MINUTOS = 10 * 60 * 1000;
 
 export function sesiones(bd: Bd) {
   const Almacen = connectPgSimple(session);
@@ -96,6 +97,9 @@ export function rutasDeEntrada(bd: Bd) {
       const g = await configuracionGoogle();
       const verificador = oidc.randomPKCECodeVerifier(), estado = oidc.randomState();
       req.session.google = { verificador, estado };
+      // Cualquiera puede abrir esta página sin llegar a entrar: su sesión a medias caduca en 10 minutos, no en 30 días,
+      // para que una ráfaga no llene la tabla. Al entrar, la sesión nueva vuelve a durar 30 días.
+      if (!req.session.usuarioId) req.session.cookie.maxAge = DIEZ_MINUTOS;
       const url = oidc.buildAuthorizationUrl(g, {
         redirect_uri: urlVuelta(), scope: 'openid email profile', state: estado, hd: config.acceso.dominio, prompt: 'select_account',
         code_challenge: await oidc.calculatePKCECodeChallenge(verificador), code_challenge_method: 'S256',
