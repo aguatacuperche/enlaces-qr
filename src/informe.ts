@@ -30,11 +30,25 @@ export type Contexto = { dominio: string; urlPublica: string; pie: string; color
 
 // ---------------------------------------------------------------- Cuándo toca
 
+// Los formateadores, uno por zona y no uno por llamada: cada uno pesa unos 30 KB de memoria nativa que el recolector no
+// ve (ver fechas.ts), y proximoEnvio() recorre hasta 70 días cada vez que se abre la página de usuarios.
+const formatos = new Map<string, { hora: Intl.DateTimeFormat; dia: Intl.DateTimeFormat }>();
+
+function formatosDe(zona: string) {
+  let f = formatos.get(zona);
+  if (!f) {
+    f = {
+      hora: new Intl.DateTimeFormat('en-CA', { timeZone: zona, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }),
+      dia: new Intl.DateTimeFormat('en-CA', { timeZone: zona, day: 'numeric', weekday: 'short' }),
+    };
+    formatos.set(zona, f);
+  }
+  return f;
+}
+
 /** «2026-11» y si es momento de enviar el de ese mes: del primer lunes a las 8:00 hasta el domingo siguiente. */
 export function momento(ahora = new Date(), zona = ZONA): { mes: string; toca: boolean } {
-  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
-    timeZone: zona, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
-  }).formatToParts(ahora).map(x => [x.type, x.value]));
+  const p = Object.fromEntries(formatosDe(zona).hora.formatToParts(ahora).map(x => [x.type, x.value]));
   const ano = Number(p.year), mes = Number(p.month), dia = Number(p.day), hora = Number(p.hour);
   const diaSemanaDel1 = new Date(Date.UTC(ano, mes - 1, 1)).getUTCDay();  // 0 domingo … 6 sábado
   const primerLunes = 1 + (8 - diaSemanaDel1) % 7;
@@ -46,7 +60,7 @@ export function momento(ahora = new Date(), zona = ZONA): { mes: string; toca: b
 export function proximoEnvio(ahora = new Date(), zona = ZONA): Date {
   for (let i = 0; i < 70; i++) {
     const d = new Date(ahora.getTime() + i * 864e5);
-    const local = new Intl.DateTimeFormat('en-CA', { timeZone: zona, day: 'numeric', weekday: 'short' }).formatToParts(d);
+    const local = formatosDe(zona).dia.formatToParts(d);
     const dia = Number(local.find(x => x.type === 'day')!.value), semana = local.find(x => x.type === 'weekday')!.value;
     if (semana === 'Mon' && dia <= 7 && (i > 0 || !momento(ahora, zona).toca)) return d;
   }
