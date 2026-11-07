@@ -421,3 +421,22 @@ describe('informe mensual por correo', () => {
     expect(usuarios).toContain('Último informe:');
   });
 });
+
+describe('peticiones malintencionadas', () => {
+  it('un formulario comprimido con bytes de más al final no tumba la app (GHSA-27r3-jxmh-p828)', async () => {
+    const { gzipSync } = await import('node:zlib');
+    const cuerpo = Buffer.concat([gzipSync('a=1'), Buffer.from('bytes de más')]);
+    const estado = await new Promise<number>((ok, mal) => {
+      const req = http.request(`${BASE}/yourls-api.php`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', 'content-encoding': 'gzip', 'content-length': cuerpo.length },
+      }, r => { r.resume(); r.on('end', () => ok(r.statusCode!)); });
+      req.on('error', mal);
+      req.end(cuerpo);
+    });
+    expect(estado).toBe(415);
+    // El error llegaba después de contestar: se da un momento y se comprueba que sigue en pie.
+    await new Promise(r => setTimeout(r, 300));
+    expect((await pedir('/excursion-museo')).estado).toBe(302);
+  });
+});
