@@ -20,6 +20,9 @@ import { aConsulta, leerOpciones, pixelesDe, POR_DEFECTO, TAMANOS, type Opciones
 import { cartel, HOJAS, pegatinas, problemaConHoja, type Hoja } from './qr/impresion.ts';
 import type { Cartero } from './correo.ts';
 import { contexto, destinatarios, enviarUno, momento, proximoEnvio } from './informe.ts';
+import {
+  cambiarLlave, cambiarPrograma, crearPrograma, listarProgramas, programaPorId, retirarPrograma, type DatosPrograma,
+} from './programas.ts';
 
 /** La hoja de pegatinas pedida: uno de los formatos habituales o una a medida (campos m_*). */
 function hojaDesde(q: Request['query']): { hoja: Hoja; problema: string | null } {
@@ -83,14 +86,16 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
   async function listado(req: Request, res: Response, vista: 'mios' | 'todos', formulario?: { datos: Record<string, string>; error: ErrorDeFormulario }) {
     const u = usuarioDe(res);
     const sinDueno = vista === 'todos' && req.query.dueno === 'sin';
-    const base: Filtro = vista === 'mios' ? { usuarioId: u.id } : sinDueno ? { usuarioId: null } : {};
+    // Los enlaces de un programa (se llega desde Programas).
+    const programa = vista === 'todos' && !sinDueno && req.query.programa ? await programaPorId(bd, Number(req.query.programa)) : undefined;
+    const base: Filtro = vista === 'mios' ? { usuarioId: u.id } : sinDueno ? { usuarioId: null } : programa ? { programaId: programa.id } : {};
     const filtro = { ...base, ...filtroDesde(req.query) };
     const enlaces = await listarEnlaces(bd, filtro);
     res.status(formulario ? 422 : 200).render('panel', {
-      vista, filtro, sinDueno, enlaces,
+      vista, filtro, sinDueno, programa, enlaces,
       series: await seriesDiarias(bd, enlaces.map(e => e.id)),
       cuentas: await recuento(bd, base),
-      etiquetas: await etiquetas(bd, base.usuarioId),
+      etiquetas: await etiquetas(bd, base.usuarioId, base.programaId),
       misEnlaces: vista === 'mios' ? undefined : (await recuento(bd, { usuarioId: u.id })).todos,
       totalTodos: u.admin ? (await recuento(bd, {})).todos : undefined,
       nuevo: formulario?.datos ?? { nombre: await nombreAutomaticoLibre(bd) },
@@ -213,7 +218,8 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
   r.post('/enlaces/:id/dueno', exigirAdmin, async (req, res) => {
     const e = await enlaceDe(req, res);
     if (!e) return;
-    await cambiarDueno(bd, e.id, Number(req.body.usuario) || null);
+    // «programa»: se queda con el programa que lo creó.
+    if (req.body.usuario !== 'programa') await cambiarDueno(bd, e.id, Number(req.body.usuario) || null);
     res.redirect(`/panel/enlaces/${e.id}`);
   });
 
@@ -324,6 +330,56 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
     const de = req.body.de === 'sin' ? null : Number(req.body.de), a = Number(req.body.a);
     const n = a && de !== a ? await pasarEnlaces(bd, de, a) : 0;
     res.redirect(`/panel/usuarios?hecho=${n}`);
+  });
+
+  // ---------- Programas que crean enlaces por la API (administradores) ----------
+
+  type Extra = { llave?: { nombre: string; llave: string }; error?: ErrorDeFormulario; datos?: DatosPrograma; editando?: number; guardado?: boolean };
+
+  /** La llave nueva se enseña en la respuesta misma, sin guardarla en ningún sitio: no se vuelve a ver. */
+  async function programas(res: Response, extra: Extra = {}) {
+    res.status(extra.error ? 422 : 200).set('Cache-Control', 'no-store').render('programas', {
+      programas: await listarProgramas(bd), api: `${config.urlPublica}/yourls-api.php`,
+      llave: undefined, error: undefined, datos: undefined, editando: undefined, guardado: false, ...extra,
+    });
+  }
+
+  const datosPrograma = (req: Request): DatosPrograma =>
+    ({ nombre: texto(req.body.nombre), dominios: texto(req.body.dominios), por_minuto: texto(req.body.por_minuto) });
+
+  r.get('/programas', exigirAdmin, (req, res) => programas(res, { guardado: req.query.guardado === '1' }));
+
+  r.post('/programas', exigirAdmin, async (req, res) => {
+    const datos = datosPrograma(req);
+    try {
+      const { id, llave } = await crearPrograma(bd, usuarioDe(res).id, datos);
+      await programas(res, { llave: { nombre: (await programaPorId(bd, id))!.nombre, llave } });
+    } catch (e) {
+      if (!(e instanceof ErrorDeFormulario)) throw e;
+      await programas(res, { error: e, datos });
+    }
+  });
+
+  r.post('/programas/:id', exigirAdmin, async (req, res) => {
+    const id = Number(req.params.id), datos = datosPrograma(req);
+    try {
+      await cambiarPrograma(bd, id, datos);
+      res.redirect('/panel/programas?guardado=1');
+    } catch (e) {
+      if (!(e instanceof ErrorDeFormulario)) throw e;
+      await programas(res, { error: e, datos, editando: id });
+    }
+  });
+
+  r.post('/programas/:id/llave', exigirAdmin, async (req, res) => {
+    const p = await programaPorId(bd, Number(req.params.id));
+    if (!p) return res.redirect('/panel/programas');
+    await programas(res, { llave: { nombre: p.nombre, llave: await cambiarLlave(bd, p.id) } });
+  });
+
+  r.post('/programas/:id/retirar', exigirAdmin, async (req, res) => {
+    await retirarPrograma(bd, Number(req.params.id));
+    res.redirect('/panel/programas');
   });
 
   return r;

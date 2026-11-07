@@ -23,7 +23,7 @@
         <dt>En total</dt><dd><%= numero(e.visitas) %> visitas<% if (e.visitas_anteriores) { %> (<%= numero(e.visitas_anteriores) %> de la app anterior, sin fechas)<% } %></dd>
         <dt>Últimos 30 días</dt><dd><%= numero(e.visitas_mes) %></dd>
         <dt>Estado</dt><dd><%= { activo: 'Activo', pausa: 'En pausa', caducado: 'Caducado' }[estado] %></dd>
-        <dt>Creado</dt><dd><%= fechaCorta(e.creado) %><% if (e.dueno) { %>, de <%= e.dueno %><% } else { %>, sin dueño<% } %></dd>
+        <dt>Creado</dt><dd><%= fechaCorta(e.creado) %><% if (e.dueno) { %>, de <%= e.dueno %><% } else if (e.programa) { %>, por el programa <%= e.programa %><% } else { %>, sin dueño<% } %></dd>
       </dl>
 
       <div class="comprobacion">
@@ -128,6 +128,7 @@
         <label><span>Dueño</span>
           <div class="pasar">
             <select name="usuario" aria-label="Dueño">
+              <% if (e.programa) { %><option value="programa" selected>El programa <%= e.programa %></option><% } %>
               <option value="">Sin dueño</option>
               <% for (const u of usuarios) { %><option value="<%= u.id %>" <%= u.id === e.usuario_id ? 'selected' : '' %>><%= u.nombre %></option><% } %>
             </select>

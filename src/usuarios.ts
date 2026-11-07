@@ -37,12 +37,15 @@ export async function cambiarAdmin(bd: Bd, id: number, admin: boolean): Promise<
   await bd.query('update usuarios set admin = $2 where id = $1', [id, admin]);
 }
 
-/** Pasa todos los enlaces de un usuario (o los que no tienen dueño, con `de = null`) a otro. Devuelve cuántos. */
+/**
+ * Pasa todos los enlaces de un usuario (o los que no tienen dueño, con `de = null`) a otro. Devuelve cuántos.
+ * Los de los programas no cuentan como «sin dueño»: se pasan de uno en uno, desde su ficha.
+ */
 export async function pasarEnlaces(bd: Bd, de: number | null, a: number): Promise<number> {
   const r = await bd.query(
     `update enlaces set usuario_id = $2, actualizado = now(),
        dueno_desde = case when usuario_id is distinct from $2 then now() else dueno_desde end
-     where usuario_id is not distinct from $1`, [de, a]);
+     where usuario_id is not distinct from $1 and ($1::int is not null or programa_id is null)`, [de, a]);
   return r.rowCount ?? 0;
 }
 

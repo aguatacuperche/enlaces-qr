@@ -11,6 +11,7 @@ import { ruta } from './raiz.ts';
 import { ayudasVistas } from './ayudas-vistas.ts';
 import { cargarUsuario, rutasDeEntrada, sesiones } from './entrada.ts';
 import { rutasDelPanel } from './panel.ts';
+import { rutasDeLaApi } from './api.ts';
 import { iniciarComprobaciones } from './comprobador.ts';
 import { crearCartero, type Cartero } from './correo.ts';
 import { contexto, iniciarInformes } from './informe.ts';
@@ -77,6 +78,8 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
   app.get('/salud', async (_req, res) => { await bd.query('select 1'); res.type('text').send('ok'); });
 
   app.use(express.urlencoded({ extended: false, limit: '20kb' }));
+  // La API para otros programas va con su llave, sin sesión: no viene de la propia app.
+  app.use(rutasDeLaApi(bd));
   app.use(mismoOrigen);
 
   // La sesión solo hace falta en la entrada y en el panel; las redirecciones no tocan la tabla de sesiones.

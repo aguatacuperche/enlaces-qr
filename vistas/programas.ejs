@@ -1,0 +1,80 @@
+<%
+  // Tras un error, el formulario que se envió (el del programa nuevo o el de uno ya creado) conserva lo escrito.
+  const suyo = p => p ? editando === p.id : !editando;
+  const valor = (campo, p) => datos && suyo(p) ? datos[campo] : p ? (campo === 'dominios' ? p.dominios.join(', ') : p[campo]) : '';
+  const mal = (campo, p) => error && error.campo === campo && suyo(p) ? 'mal' : '';
+%>
+<%- include('parciales/cabeza', { titulo: 'Programas' }) %>
+<%- include('parciales/barra', { seccion: 'programas' }) %>
+<main class="cuerpo programas">
+  <h1>Programas</h1>
+  <% if (guardado) { %><p class="aviso bien" role="status">Guardado.</p><% } %>
+  <% if (error) { %><p class="aviso mal" role="alert"><%= error.message %></p><% } %>
+  <p class="entradilla">Otros programas, como el aula virtual, pueden crear enlaces cortos por su cuenta, cada uno con su llave. Sus enlaces salen en «Todos» a nombre del programa, y se pueden pausar, cambiar o pasar a un profesor como cualquier otro.</p>
+
+  <% if (llave) { %>
+  <section class="tarjeta llave-nueva" role="status">
+    <h2>La llave de <%= llave.nombre %></h2>
+    <p>Cópiala ahora y pégala en la configuración del programa: no se vuelve a enseñar. Si se pierde, saca una nueva.</p>
+    <div class="llave"><code><%= llave.llave %></code><button type="button" class="btn suave peq" data-copiar="<%= llave.llave %>"><svg class="i"><use href="#i-copiar"/></svg>Copiar la llave</button></div>
+  </section>
+  <% } %>
+
+  <section class="tarjeta">
+    <h2>Programa nuevo</h2>
+    <form class="formulario" method="post" action="/panel/programas">
+      <div class="dos">
+        <label><span>Nombre</span><div class="campo <%= mal('nombre') %>"><input name="nombre" required maxlength="60" placeholder="Comedor" value="<%= valor('nombre') %>"></div>
+          <small>Así salen sus enlaces en la columna «Dueño».</small></label>
+        <label><span>Peticiones por minuto</span><div class="campo <%= mal('por_minuto') %>"><input name="por_minuto" type="number" min="1" max="600" value="<%= valor('por_minuto') || 60 %>"></div>
+          <small>Si pide más, tiene que esperar al minuto siguiente.</small></label>
+      </div>
+      <label><span>Puede crear enlaces hacia</span><div class="campo <%= mal('dominios') %>"><input name="dominios" required placeholder="aula.colegio.example" value="<%= valor('dominios') %>" spellcheck="false"></div>
+        <small>Uno o varios dominios, separados por comas. Los enlaces que lleven a cualquier otro sitio se rechazan.</small></label>
+      <div><button class="btn">Crear y ver la llave</button></div>
+    </form>
+    <p class="nota">Quien configure el programa necesita la llave y esta dirección: <code><%= api %></code>
+      <button type="button" class="ic" title="Copiar la dirección" aria-label="Copiar la dirección de la API" data-copiar="<%= api %>"><svg class="i"><use href="#i-copiar"/></svg></button>
+      Funciona como la API de YOURLS; el detalle está en el README del proyecto.</p>
+  </section>
+
+  <% for (const p of programas) { %>
+  <section class="tarjeta programa <%= p.activo ? '' : 'retirado' %>">
+    <h2><%= p.nombre %> <span class="chip-gris"><%= p.activo ? 'Activo' : 'Retirado: su llave ya no vale' %></span></h2>
+    <dl class="datos">
+      <dt>Puede crear enlaces hacia</dt><dd><%= p.dominios.join(', ') %></dd>
+      <dt>Enlaces</dt><dd><% if (p.enlaces) { %><a href="/panel/todos?programa=<%= p.id %>"><%= p.enlaces === 1 ? '1 enlace' : `${numero(p.enlaces)} enlaces` %></a><% } else { %>Ninguno todavía<% } %></dd>
+      <dt>Último uso</dt><dd><%= p.ultimo_uso ? fechaCorta(p.ultimo_uso) : 'Todavía no' %></dd>
+      <dt>Tope</dt><dd><%= p.por_minuto %> peticiones por minuto</dd>
+      <dt>Creado</dt><dd><%= fechaCorta(p.creado) %><%= p.creado_por ? `, por ${p.creado_por}` : '' %></dd>
+    </dl>
+    <details <%= editando === p.id ? 'open' : '' %>>
+      <summary>Cambiar el nombre, los dominios o el tope</summary>
+      <form class="formulario" method="post" action="/panel/programas/<%= p.id %>">
+        <div class="dos">
+          <label><span>Nombre</span><div class="campo <%= mal('nombre', p) %>"><input name="nombre" required maxlength="60" value="<%= valor('nombre', p) %>"></div></label>
+          <label><span>Peticiones por minuto</span><div class="campo <%= mal('por_minuto', p) %>"><input name="por_minuto" type="number" min="1" max="600" value="<%= valor('por_minuto', p) %>"></div></label>
+        </div>
+        <label><span>Puede crear enlaces hacia</span><div class="campo <%= mal('dominios', p) %>"><input name="dominios" required value="<%= valor('dominios', p) %>" spellcheck="false"></div>
+          <small>Los enlaces que ya tiene siguen igual; esto vale para los que cree o cambie a partir de ahora.</small></label>
+        <div><button class="btn suave peq">Guardar</button></div>
+      </form>
+    </details>
+    <div class="acciones-programa zona-peligro">
+      <form method="post" action="/panel/programas/<%= p.id %>/llave" data-confirmar="¿Sacar una llave nueva para <%= p.nombre %>?"
+            data-confirmar-texto="<%= p.activo ? 'La que tiene ahora deja de valer al momento: habrá que poner la nueva en el programa.' : 'Volverá a poder crear y cambiar sus enlaces con la llave nueva.' %>"
+            data-confirmar-boton="Sacar la llave nueva">
+        <button class="btn suave peq"><%= p.activo ? 'Sacar una llave nueva' : 'Volver a activarlo con una llave nueva' %></button>
+      </form>
+      <% if (p.activo) { %>
+      <form method="post" action="/panel/programas/<%= p.id %>/retirar" data-confirmar="¿Retirar <%= p.nombre %>?"
+            data-confirmar-texto="Su llave deja de valer: ya no podrá crear ni cambiar enlaces. Los que ya tiene siguen funcionando."
+            data-confirmar-boton="Retirar">
+        <button class="btn peligro peq">Retirar</button>
+      </form>
+      <% } %>
+    </div>
+  </section>
+  <% } %>
+</main>
+<%- include('parciales/pie') %>
