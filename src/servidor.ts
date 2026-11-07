@@ -77,7 +77,9 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
   app.get('/marca/qr.svg', (_req, res) => res.type('image/svg+xml').set('Cache-Control', 'public, max-age=86400').send(qrEntrada));
   app.get('/salud', async (_req, res) => { await bd.query('select 1'); res.type('text').send('ok'); });
 
-  app.use(express.urlencoded({ extended: false, limit: '20kb' }));
+  // Sin cuerpos comprimidos: ningún navegador ni programa los manda, y descomprimirlos tumbaba la app con una sola
+  // petición malintencionada (GHSA-27r3-jxmh-p828, body-parser < 2.4.0).
+  app.use(express.urlencoded({ extended: false, limit: '20kb', inflate: false }));
   // La API para otros programas va con su llave, sin sesión: no viene de la propia app.
   app.use(rutasDeLaApi(bd));
   app.use(mismoOrigen);
@@ -116,7 +118,12 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
 
   app.use((_req, res) => noEncontrado(res, { tipo: 'no-existe', nombre: '', parecido: null }));
 
-  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: Error & { status?: number }, _req: Request, res: Response, _next: NextFunction) => {
+    // Lo que rechaza el lector de formularios (demasiado grande, comprimido, mal escrito) es culpa de la petición:
+    // se contesta con su código y no llena el registro.
+    if (err.status && err.status >= 400 && err.status < 500) {
+      return res.status(err.status).render('error', { titulo: 'Petición rechazada', mensaje: 'No se ha podido leer lo que se ha enviado.' });
+    }
     console.error(err);
     res.status(500).render('error', { titulo: 'Algo ha fallado', mensaje: 'Ha habido un error. Prueba otra vez dentro de un momento.' });
   });
