@@ -307,6 +307,24 @@ h1, h2, h3, h4 { line-height: 1.2; }
 .informe-mensual form { margin: 0; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
+/* ---------- Programas (API) ---------- */
+.programas .entradilla { color: var(--tinta-2); margin: 0 0 16px; }
+.programas .tarjeta + .tarjeta { margin-top: 16px; }
+.programas .tarjeta > h2 { font-size: 17px; margin: 0 0 12px; }
+.llave-nueva { box-shadow: inset 4px 0 0 var(--segundo), var(--sombra); }
+.llave-nueva p { margin: 0 0 12px; color: var(--tinta-2); }
+.llave { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.llave code { flex: 1 1 300px; font: 700 14px/1.4 ui-monospace, monospace; background: var(--fondo); border-radius: 8px; padding: 9px 12px; overflow-wrap: anywhere; }
+.nota code { overflow-wrap: anywhere; }
+.nota .ic { vertical-align: middle; }
+.programa h2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.programa.retirado { background: color-mix(in srgb, var(--papel) 70%, var(--fondo)); }
+.programa details { margin-top: 14px; }
+.programa summary { cursor: pointer; font-weight: 800; color: var(--principal); font-size: 14.5px; }
+.programa details .formulario { margin-top: 12px; }
+.acciones-programa { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.acciones-programa form { margin: 0; }
+
 /* ---------- Páginas ---------- */
 .ficha.de-pagina { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
 .campo textarea { border: 0; outline: 0; color: var(--tinta); flex: 1; min-width: 0; background: transparent; font: inherit; resize: vertical; }

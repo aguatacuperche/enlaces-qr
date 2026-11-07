@@ -11,6 +11,8 @@ export type Estado = 'activo' | 'pausa' | 'caducado';
 export type Enlace = {
   id: number; tipo: 'enlace' | 'pagina'; nombre: string; destino: string | null; titulo: string; descripcion: string | null;
   activo: boolean; caduca: string | null; etiqueta: string | null; usuario_id: number | null; dueno: string | null;
+  /** Si lo creó un programa por la API (y nadie se lo ha pasado a un profesor): cuál. */
+  programa_id: number | null; programa: string | null;
   visitas_anteriores: number; visitas: number; visitas_mes: number; creado: Date; actualizado: Date;
   comprobado: Date | null; problema: string | null; problema_detalle: string | null; aviso_ignorado: boolean;
   /** Solo páginas: cuántos enlaces tiene y cuántos no abren. */
@@ -36,11 +38,13 @@ export class ErrorDeFormulario extends Error {
 
 const SELECT = `
   select e.id, e.tipo, e.nombre, e.destino, e.titulo, e.descripcion, e.activo, e.caduca, e.etiqueta, e.usuario_id,
-         u.nombre as dueno, e.visitas_anteriores, e.visitas_anteriores + coalesce(v.total, 0) as visitas,
+         u.nombre as dueno, e.programa_id, p.nombre as programa,
+         e.visitas_anteriores, e.visitas_anteriores + coalesce(v.total, 0) as visitas,
          coalesce(v.mes, 0) as visitas_mes, e.creado, e.actualizado,
          e.comprobado, e.problema, e.problema_detalle, e.aviso_ignorado, el.elementos, el.elementos_mal
   from enlaces e
   left join usuarios u on u.id = e.usuario_id
+  left join programas p on p.id = e.programa_id
   left join lateral (
     select sum(total)::int as total, (sum(total) filter (where dia > $1::date - 30))::int as mes
     from visitas where enlace_id = e.id) v on true
@@ -53,8 +57,10 @@ const CON_PROBLEMA = `((e.problema is not null and not e.aviso_ignorado)
   or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null))`;
 
 export type Filtro = {
-  /** Enlaces de este usuario; `null` = sin dueño; sin indicar = todos. */
+  /** Enlaces de este usuario; `null` = sin dueño (ni profesor ni programa); sin indicar = todos. */
   usuarioId?: number | null;
+  /** Enlaces de este programa. */
+  programaId?: number;
   q?: string; estado?: Estado | ''; etiqueta?: string; orden?: 'recientes' | 'visitas' | 'titulo';
   /** Solo los que tienen algo que revisar. */
   problemas?: boolean;
@@ -62,8 +68,9 @@ export type Filtro = {
 
 function condiciones(f: Filtro, params: unknown[]): string {
   const w: string[] = [];
-  if (f.usuarioId === null) w.push('e.usuario_id is null');
+  if (f.usuarioId === null) w.push('e.usuario_id is null and e.programa_id is null');
   else if (f.usuarioId !== undefined) { params.push(f.usuarioId); w.push(`e.usuario_id = $${params.length}`); }
+  if (f.programaId !== undefined) { params.push(f.programaId); w.push(`e.programa_id = $${params.length}`); }
   if (f.q) {
     params.push(`%${f.q.replace(/[\\%_]/g, '\\$&')}%`);
     const p = `$${params.length}`;
@@ -92,15 +99,16 @@ export async function recuento(bd: Bd, f: Filtro): Promise<Record<Estado | 'todo
             (count(*) filter (where e.activo and (e.caduca is null or e.caduca >= $1::date)))::int as activo,
             (count(*) filter (where not e.activo))::int as pausa,
             (count(*) filter (where e.activo and e.caduca < $1::date))::int as caducado
-     from enlaces e` + condiciones({ usuarioId: f.usuarioId }, params), params);
+     from enlaces e` + condiciones({ usuarioId: f.usuarioId, programaId: f.programaId }, params), params);
   return rows[0];
 }
 
-export async function etiquetas(bd: Bd, usuarioId?: number | null): Promise<string[]> {
-  const { rows } = usuarioId === undefined
-    ? await bd.query<{ etiqueta: string }>('select distinct etiqueta from enlaces where etiqueta is not null order by 1')
-    : await bd.query<{ etiqueta: string }>(
-      'select distinct etiqueta from enlaces where etiqueta is not null and usuario_id is not distinct from $1 order by 1', [usuarioId]);
+export async function etiquetas(bd: Bd, usuarioId?: number | null, programaId?: number): Promise<string[]> {
+  const w = ['etiqueta is not null'], params: unknown[] = [];
+  if (usuarioId === null) w.push('usuario_id is null and programa_id is null');
+  else if (usuarioId !== undefined) { params.push(usuarioId); w.push(`usuario_id = $${params.length}`); }
+  if (programaId !== undefined) { params.push(programaId); w.push(`programa_id = $${params.length}`); }
+  const { rows } = await bd.query<{ etiqueta: string }>(`select distinct etiqueta from enlaces where ${w.join(' and ')} order by 1`, params);
   return rows.map(r => r.etiqueta);
 }
 
@@ -185,12 +193,13 @@ async function validar(bd: Bd, d: DatosEnlace, salvoId?: number, nombreAnterior?
   };
 }
 
-export async function crearEnlace(bd: Bd, usuarioId: number, d: DatosEnlace): Promise<number> {
+/** De un profesor (`usuarioId`) o, si lo pide un programa por la API, de ese programa (`programaId`). */
+export async function crearEnlace(bd: Bd, usuarioId: number | null, d: DatosEnlace, programaId: number | null = null): Promise<number> {
   const v = await validar(bd, d);
   try {
     const { rows } = await bd.query<{ id: number }>(
-      `insert into enlaces (nombre, destino, titulo, etiqueta, caduca, usuario_id) values ($1, $2, $3, $4, $5, $6) returning id`,
-      [v.nombre, v.destino, v.titulo, v.etiqueta ?? null, v.caduca ?? null, usuarioId]);
+      `insert into enlaces (nombre, destino, titulo, etiqueta, caduca, usuario_id, programa_id) values ($1, $2, $3, $4, $5, $6, $7) returning id`,
+      [v.nombre, v.destino, v.titulo, v.etiqueta ?? null, v.caduca ?? null, usuarioId, programaId]);
     return rows[0].id;
   } catch (e) {
     // Dos profesores eligiendo el mismo nombre a la vez: lo para el índice único.
@@ -222,9 +231,10 @@ export async function cambiarActivo(bd: Bd, id: number, activo: boolean): Promis
   await bd.query('update enlaces set activo = $2, actualizado = now() where id = $1', [id, activo]);
 }
 
+/** Pasa el enlace a un profesor o lo deja sin dueño. Si era de un programa, deja de serlo. */
 export async function cambiarDueno(bd: Bd, id: number, usuarioId: number | null): Promise<void> {
   await bd.query(
-    `update enlaces set usuario_id = $2, actualizado = now(),
+    `update enlaces set usuario_id = $2, programa_id = null, actualizado = now(),
        dueno_desde = case when usuario_id is distinct from $2 then now() else dueno_desde end
      where id = $1`, [id, usuarioId]);
 }

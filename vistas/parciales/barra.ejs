@@ -5,6 +5,7 @@
     <% if (usuario.admin) { %>
       <a href="/panel/todos" class="<%= seccion === 'todos' ? 'activo' : '' %>">Todos<% if (typeof totalTodos === 'number') { %> <small><%= totalTodos %></small><% } %></a>
       <a href="/panel/usuarios" class="<%= seccion === 'usuarios' ? 'activo' : '' %>">Usuarios</a>
+      <a href="/panel/programas" class="<%= seccion === 'programas' ? 'activo' : '' %>">Programas</a>
     <% } %>
   </nav>
   <a class="ayuda-barra" href="/panel/ayuda" title="Qué se puede hacer aquí"><svg class="i"><use href="#i-ayuda"/></svg><span>Ayuda</span></a>

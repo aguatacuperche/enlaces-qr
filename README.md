@@ -31,6 +31,9 @@ les sacan un QR con los colores del centro y ven cuántas visitas tienen.
 - **Visitas sin datos personales**: un contador por enlace y día, sin IP, sin cookies y sin nada de quien visita. No
   cuentan los robots ni las vistas previas de WhatsApp y similares.
 - `/svg/<nombre>` y `/png/<nombre>` dan el QR de un enlace, por si alguien los tiene enlazados.
+- **API para otros programas**, compatible con la de YOURLS: el aula virtual, una app de comedor o de biblioteca
+  pueden crear sus enlaces cortos, cada uno con su llave. Cada llave solo crea enlaces hacia los dominios que se le
+  digan y tiene un tope por minuto; sus enlaces salen en el panel a nombre del programa. Ver más abajo.
 
 ## Cómo está hecha
 
@@ -43,9 +46,11 @@ src/
   servidor.ts       arranque, seguridad y la redirección <dominio>/<nombre>
   redireccion.ts    enlaces en memoria, resolver un nombre, contar visitas
   entrada.ts        Google (OpenID Connect), sesiones y entrada de prueba
-  panel.ts          rutas del panel, del creador de QR y de usuarios
+  panel.ts          rutas del panel, del creador de QR, de usuarios y de programas
+  api.ts            la API para otros programas (compatible con YOURLS)
   enlaces.ts        consultas y reglas de los enlaces
   usuarios.ts       consultas de los usuarios
+  programas.ts      los programas de la API: llaves, dominios y tope
   acceso.ts         quién puede entrar
   nombres.ts        reglas de los nombres de enlace
   marca.ts          colores y logos del centro
@@ -75,6 +80,63 @@ Los colores y los logos van en una carpeta aparte, que se indica con `MARCA` (o 
 
 El nombre del centro, el dominio de correo, el patrón de cuentas excluidas, los enlaces a la web y al aula virtual y
 la zona horaria van en `.env` (ver `.env.example`).
+
+## API para otros programas
+
+Compatible con la API de [YOURLS](https://yourls.org/) para acortar (`action=shorturl`) y con su complemento «edit
+url» para cambiar el destino (`action=update`): vale cualquier cliente de YOURLS que llame por POST.
+
+1. Un administrador entra en **Programas**, crea el programa (su nombre, los dominios hacia los que podrá crear
+   enlaces y un tope de peticiones por minuto) y copia la llave. Solo se enseña esa vez. Si se pierde, «Sacar una
+   llave nueva» la cambia y la anterior deja de valer al momento; «Retirar» la anula, y sus enlaces siguen funcionando.
+2. El programa llama a `POST <URL_PUBLICA>/yourls-api.php` con los campos en `application/x-www-form-urlencoded`.
+   La llave va en el cuerpo (`signature`), nunca en la dirección, porque ahí acabaría en los registros: por GET la API
+   no contesta.
+
+Crear un enlace (`title` y `keyword`, el nombre, son opcionales):
+
+```sh
+curl -s https://enlaces.colegio.example/yourls-api.php \
+  -d action=shorturl -d format=json -d signature="$LLAVE" \
+  --data-urlencode url='https://aula.colegio.example/menu.php?t=abc' \
+  --data-urlencode title='Monitores · Turno 1'
+```
+
+```json
+{"status":"success","message":"https://aula.colegio.example/menu.php?t=abc añadido","title":"Monitores · Turno 1",
+ "shorturl":"https://enlaces.colegio.example/MKQT","statusCode":200,
+ "url":{"keyword":"MKQT","url":"https://aula.colegio.example/menu.php?t=abc","title":"Monitores · Turno 1","date":"2026-11-07 10:30:00"}}
+```
+
+- Sin `keyword`, el nombre automático de 4 letras. Con `keyword`, las mismas reglas que en el panel (minúsculas,
+  números y guiones); si ya existe o no vale: `error:keyword`.
+- Si ese destino ya tiene un enlace del mismo programa, devuelve ese, como YOURLS: `"status":"fail"`,
+  `"code":"error:url"` y el `shorturl` que ya había, con estado 200. Los enlaces de los profesores no cuentan.
+- Hacia un dominio que no es del programa: `error:domain` (un subdominio tampoco vale si no está en la lista). Si
+  falta la dirección o no vale: `error:nourl`.
+
+Cambiar el destino de un enlace del programa (y su título, si se manda `title`):
+
+```sh
+curl -s https://enlaces.colegio.example/yourls-api.php \
+  -d action=update -d format=json -d signature="$LLAVE" -d shorturl=MKQT \
+  --data-urlencode url='https://aula.colegio.example/menu.php?t=def'
+```
+
+Contesta `"message":"success: updated"` (200), o `"error: not found"` (404) si no existe o no es de ese programa.
+`shorturl` puede ser el nombre o el enlace corto entero.
+
+Además:
+
+- `format=simple` devuelve solo el enlace corto (o el mensaje de error), en texto.
+- Los errores llevan `"status":"fail"`, un `code` y su estado HTTP: 403 si falta la llave o no vale (`error:auth`),
+  405 por GET, 415 con `multipart/form-data`, 429 si se pasa del tope por minuto (`error:limit`).
+- Los enlaces de un programa salen en **Todos**, con el programa como dueño, y desde Programas se ven solo los suyos.
+  Se pueden pausar, editar o pasar a un profesor; pasado a un profesor, el programa ya no lo puede cambiar. No entran
+  en el informe mensual por correo.
+- Se comprueban cada semana, como los demás (con HEAD o GET y sin sesión): el destino tiene que aguantarlo sin
+  cambiar nada. Si el programa renueva sus direcciones, mejor `update` que dejar la vieja sin servir, o saldrá como
+  enlace que no abre.
 
 ## Desarrollo en local
 
