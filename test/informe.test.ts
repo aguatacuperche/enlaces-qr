@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { componerInforme, momento, type Contexto, type Destinatario } from '../src/informe.ts';
+import { describe, expect, it, vi } from 'vitest';
+import { componerInforme, momento, proximoEnvio, type Contexto, type Destinatario } from '../src/informe.ts';
 import { cargarMarca } from '../src/marca.ts';
 
 describe('cuándo sale el informe', () => {
@@ -23,6 +23,21 @@ describe('cuándo sale el informe', () => {
     // A las 7:30 en Lisboa (horario de verano, UTC+1) ya son las 8:30 en Madrid.
     expect(momento(new Date('2026-10-05T06:30:00Z'), 'Europe/Lisbon').toca).toBe(false);
     expect(momento(new Date('2026-10-05T06:30:00Z'), 'Europe/Madrid').toca).toBe(true);
+  });
+  it('el próximo envío es el primer lunes del mes siguiente, ya hecho el de este', () => {
+    const d = proximoEnvio(new Date('2026-11-07T10:00:00Z'), 'Europe/Lisbon');
+    expect(d.toISOString().slice(0, 10)).toBe('2026-12-07');
+  });
+  it('no crea formateadores de fechas en cada llamada (pesan memoria que el recolector no ve)', () => {
+    momento(new Date(), 'Europe/Lisbon');
+    proximoEnvio(new Date(), 'Europe/Lisbon');
+    const espia = vi.spyOn(Intl, 'DateTimeFormat');
+    for (let i = 0; i < 20; i++) {
+      momento(new Date(), 'Europe/Lisbon');
+      proximoEnvio(new Date(), 'Europe/Lisbon');
+    }
+    expect(espia).not.toHaveBeenCalled();
+    espia.mockRestore();
   });
 });
 
