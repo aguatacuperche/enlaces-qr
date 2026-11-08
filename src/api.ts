@@ -46,6 +46,16 @@ function problemaDeDestino(p: ProgramaActivo, url: string): string | null {
   return null;
 }
 
+/**
+ * El enlace corto y las direcciones de su QR, que un YOURLS normal no trae: así el programa sabe que este acortador
+ * dibuja el QR, y lo pide con las opciones del creador por la consulta (?fondo=transparente&color=principal…).
+ */
+const direcciones = (nombre: string) => ({
+  shorturl: urlCorta(nombre),
+  qrsvg: `${config.urlPublica}/svg/${encodeURIComponent(nombre)}`,
+  qrpng: `${config.urlPublica}/png/${encodeURIComponent(nombre)}`,
+});
+
 /** Como en YOURLS: la fecha en UTC, «2026-11-07 10:30:00». */
 const fecha = (d: Date) => d.toISOString().slice(0, 19).replace('T', ' ');
 const datosDe = (e: Enlace) => ({ keyword: e.nombre, url: e.destino, title: e.titulo, date: fecha(e.creado) });
@@ -58,7 +68,7 @@ async function acortar(bd: Bd, p: ProgramaActivo, url: string, keyword: string, 
   if (ya) {
     return {
       status: 'fail', code: 'error:url', message: `${url} ya tiene enlace: ${urlCorta(ya.nombre)}`,
-      title: ya.titulo, shorturl: urlCorta(ya.nombre), url: datosDe(ya), statusCode: 200,
+      title: ya.titulo, ...direcciones(ya.nombre), url: datosDe(ya), statusCode: 200,
     };
   }
   let id: number | undefined;
@@ -74,7 +84,7 @@ async function acortar(bd: Bd, p: ProgramaActivo, url: string, keyword: string, 
   }
   await recargar(bd);
   const e = (await enlacePorId(bd, id))!;
-  return { status: 'success', message: `${url} añadido`, title: e.titulo, shorturl: urlCorta(e.nombre), url: datosDe(e), statusCode: 200 };
+  return { status: 'success', message: `${url} añadido`, title: e.titulo, ...direcciones(e.nombre), url: datosDe(e), statusCode: 200 };
 }
 
 /** «https://<este dominio>/ABCD» o «ABCD» → «ABCD». */
@@ -98,7 +108,7 @@ async function cambiar(bd: Bd, p: ProgramaActivo, shorturl: string, url: string,
   await recargar(bd);
   return {
     status: 'success', message: 'success: updated', simple: `${urlCorta(e.nombre)} lleva ahora a ${url}`,
-    shorturl: urlCorta(e.nombre), url: { keyword: e.nombre, url, title: title || e.titulo }, statusCode: 200,
+    ...direcciones(e.nombre), url: { keyword: e.nombre, url, title: title || e.titulo }, statusCode: 200,
   };
 }
 

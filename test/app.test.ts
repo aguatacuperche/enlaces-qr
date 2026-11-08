@@ -128,6 +128,46 @@ describe('redirección', () => {
     expect((await pedir('/png/Excursion-Museo')).tipo).toContain('image/png');
     expect((await pedir('/svg/no-existe')).estado).toBe(404);
   });
+
+  it('en /svg/ y /png/ acepta las opciones del creador por la consulta', async () => {
+    const { dibujarQR, proporcion } = await import('../src/qr/dibujo.ts');
+    const { leerOpciones } = await import('../src/qr/opciones.ts');
+    const { seLee } = await import('../src/qr/exportar.ts');
+    const corta = `${BASE}/excursion-museo`;
+    const como = (o: Record<string, string>) => dibujarQR(corta, leerOpciones({ marco: 'no', ...o }), 'excursion-museo');
+
+    // Sin consulta, o con valores que no existen, el de siempre: sin marco y con fondo blanco.
+    const sin = (await pedir('/svg/excursion-museo')).texto;
+    expect(sin).toBe(como({}));
+    expect((await pedir('/svg/excursion-museo?color=fucsia&marco=raro&fondo=rosa')).texto).toBe(sin);
+
+    const o = { fondo: 'transparente', color: 'principal', puntos: 'circulos', esquinas: 'circulo', centro: 'logo' };
+    const transparente = (await pedir(`/svg/excursion-museo?${new URLSearchParams(o)}`)).texto;
+    expect(transparente).toBe(como(o));
+    const fondoBlanco = /<rect width="[\d.]+" height="[\d.]+" fill="#fff"\/>/;
+    expect(sin).toMatch(fondoBlanco);
+    expect(transparente).not.toMatch(fondoBlanco);
+    expect(seLee(transparente, corta)).toBe(true);
+
+    const conMarco = (await pedir('/svg/excursion-museo?marco=escaneame')).texto;
+    expect(proporcion(conMarco)).toBeGreaterThan(1);
+    expect(seLee(conMarco, corta)).toBe(true);
+    // Un texto libre raro no rompe nada: se dibuja con trazos, nunca como texto del SVG.
+    const libre = await pedir(`/svg/excursion-museo?marco=libre&texto=${encodeURIComponent('<b>&"😀')}`);
+    expect(libre.estado).toBe(200);
+    expect(libre.texto).not.toContain('<b>');
+
+    const png = await pedir('/png/excursion-museo?fondo=transparente&color=oscuro');
+    expect(png.estado).toBe(200);
+    expect(png.tipo).toContain('image/png');
+  });
+
+  it('el SVG del QR no pide nada a la red (sirve guardado, sin conexión)', async () => {
+    for (const consulta of ['', '?marco=escaneame&centro=logo', '?marco=nombre']) {
+      const svg = (await pedir(`/svg/excursion-museo${consulta}`)).texto;
+      expect(svg.replace(/\sxmlns(:\w+)?="[^"]*"/g, '')).not.toMatch(/https?:|<image|<use|@import|<text|url\((?!#)/);
+    }
+  });
 });
 
 describe('entrada', () => {

@@ -134,6 +134,21 @@ describe('API compatible con YOURLS', () => {
     expect(ir.destino).toBe('https://aula.colegio.example/k.php?t=uno');
   });
 
+  it('da también las direcciones del QR del enlace, que admiten las opciones del creador', async () => {
+    const r = await api({ action: 'shorturl', url: 'https://aula.colegio.example/k.php?t=qr', signature: comedor.llave });
+    const nombre = r.json.url.keyword;
+    expect(r.json).toMatchObject({ qrsvg: `${BASE}/svg/${nombre}`, qrpng: `${BASE}/png/${nombre}` });
+    const svg = await pedir(`/svg/${nombre}?fondo=transparente&color=principal&centro=logo`);
+    expect(svg.estado).toBe(200);
+    expect(svg.tipo).toContain('image/svg+xml');
+    expect((await pedir(new URL(r.json.qrpng).pathname)).tipo).toContain('image/png');
+    // También al pedir otra vez el mismo destino y al cambiarlo.
+    const otra = await api({ action: 'shorturl', url: 'https://aula.colegio.example/k.php?t=qr', signature: comedor.llave });
+    expect(otra.json).toMatchObject({ code: 'error:url', qrsvg: r.json.qrsvg, qrpng: r.json.qrpng });
+    const cambio = await api({ action: 'update', shorturl: nombre, url: 'https://aula.colegio.example/k.php?t=qr2', signature: comedor.llave });
+    expect(cambio.json).toMatchObject({ status: 'success', qrsvg: r.json.qrsvg });
+  });
+
   it('si el destino ya tiene enlace del programa, devuelve el mismo, como YOURLS', async () => {
     const primero = await api({ action: 'shorturl', url: 'https://aula.colegio.example/k.php?t=dos', signature: comedor.llave });
     const otra = await api({ action: 'shorturl', url: 'https://aula.colegio.example/k.php?t=dos', signature: comedor.llave });
