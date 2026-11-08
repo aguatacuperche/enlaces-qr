@@ -32,9 +32,20 @@ function rr(x: number, y: number, w: number, h: number, r: number): string {
 
 const f = (n: number) => +n.toFixed(3);
 
+/**
+ * Lado, en módulos, del cuadrado que deja libre el logo, según la versión del código. Lo que tapa se lo come la
+ * corrección de errores, y cada bloque corrige poco: con 9 × 9 siempre, en las versiones 3 y 4 (los enlaces cortos
+ * de siempre) se gastaba el 73 % y el 63 % de lo que corrige el peor bloque, y una mancha o un reflejo bastaban para
+ * que no se leyera. Con 7 × 7 se queda en el 55 % y el 50 %; desde la 5, 9 × 9 gasta el 36 %. En la 1 y la 2 (solo
+ * direcciones de menos de 15 letras), 5 × 5, para no pisar el patrón de alineación.
+ */
+export function ladoDelLogo(version: number): number {
+  return version <= 2 ? 5 : version <= 4 ? 7 : 9;
+}
+
 /** El color de acento no se usa para puntos ni esquinas: sobre blanco se lee mal. Solo va en el logo. */
 export function dibujarQR(url: string, o: Opciones, nombreEnlace: string): string {
-  const { M, alineaciones } = codigo(url), n = M.length;
+  const { M, alineaciones } = codigo(url), n = M.length, media = (ladoDelLogo((n - 17) / 4) - 1) / 2;
   const c5 = cargarMarca().colores;
   const color = o.color === 'marca' ? c5.principal.valor : c5[o.color].valor;
   const ojos = o.color === 'marca' ? [c5.tercero.valor, c5.segundo.valor, c5.principal.valor] : [color, color, color];
@@ -44,7 +55,7 @@ export function dibujarQR(url: string, o: Opciones, nombreEnlace: string): strin
   const W = n + 2 * qz + (marco ? 2 * B : 0), banda = marco ? 7 : 0, H = W + banda;
   const ox = (marco ? B : 0) + qz, oy = ox;
   const c = (n - 1) / 2;
-  const tapado = (x: number, y: number) => conLogo && Math.abs(x - c) <= 4 && Math.abs(y - c) <= 4;
+  const tapado = (x: number, y: number) => conLogo && Math.abs(x - c) <= media && Math.abs(y - c) <= media;
   // Los patrones de alineación se dibujan enteros, como las esquinas: con puntos sueltos, los lectores no los
   // reconocen a tamaño grande. Si alguno queda bajo el logo (códigos largos), lo tapa y la corrección lo suple.
   const visibles = alineaciones.filter(([fy, fx]) => !tapado(fx, fy));
@@ -95,7 +106,7 @@ export function dibujarQR(url: string, o: Opciones, nombreEnlace: string): strin
 
   let centro = '';
   if (conLogo) {
-    const lx = ox + c - 4 + 0.3, lado = 8.4;
+    const lx = ox + c - media + 0.3, lado = 2 * media + 0.4;
     centro = `<path fill="#fff" d="${rr(lx, lx, lado, lado, 2)}"/>${isotipoAnidado(lx + 0.5, lx + 0.5, lado - 1)}`;
   }
 
