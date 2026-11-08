@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dibujarQR } from '../src/qr/dibujo.ts';
+import { codigo, dibujarQR, ladoDelLogo } from '../src/qr/dibujo.ts';
 import { pdf, png, seLee } from '../src/qr/exportar.ts';
 import { leerOpciones, POR_DEFECTO, type Opciones } from '../src/qr/opciones.ts';
 
@@ -23,6 +23,26 @@ describe('creador de QR', () => {
     const url = 'https://enlaces.example/jornada-de-puertas-abiertas-2026-infantil-y-primaria';
     const o = { ...POR_DEFECTO, marco: 'nombre' as const, fondo: 'transparente' as const };
     expect(seLee(dibujarQR(url, o, 'jornada-de-puertas-abiertas-2026-infantil-y-primaria'), url)).toBe(true);
+  });
+
+  it('el logo deja libre menos en los códigos pequeños, para que les quede corrección', () => {
+    const version = (url: string) => (codigo(url).M.length - 17) / 4;
+    const corta = 'https://e.example/AbCd', media = 'https://enlaces.example/abc';
+    expect([version(corta), version(media), version(URL)]).toEqual([3, 4, 5]);
+    expect([2, 3, 4, 5, 6, 10].map(ladoDelLogo)).toEqual([5, 7, 7, 9, 9, 9]);
+    // La placa blanca del logo mide el lado libre menos 0,6 módulos.
+    const placa = (url: string) => Number(dibujarQR(url, { ...POR_DEFECTO, marco: 'no' }, 'x').match(/<path fill="#fff" d="M([\d.]+) /)?.[1]);
+    const n = (url: string) => codigo(url).M.length;
+    expect(placa(corta)).toBeCloseTo(4 + (n(corta) - 1) / 2 - 3 + 0.3 + 2, 3);
+    expect(placa(URL)).toBeCloseTo(4 + (n(URL) - 1) / 2 - 4 + 0.3 + 2, 3);
+    const fallos: string[] = [];
+    for (const url of [corta, media])
+      for (const puntos of ['redondeados', 'circulos', 'cuadrados'] as const)
+        for (const marco of ['escaneame', 'no'] as const) {
+          const o: Opciones = { ...POR_DEFECTO, puntos, marco };
+          if (!seLee(dibujarQR(url, o, 'x'), url, 240)) fallos.push(`${url} ${puntos} ${marco}`);
+        }
+    expect(fallos).toEqual([]);
   });
 
   it('el texto del marco va en trazos, sin depender de tipografías instaladas', () => {
