@@ -162,6 +162,14 @@ describe('redirección', () => {
     expect(png.tipo).toContain('image/png');
   });
 
+  it('otras webs pueden poner el QR en un <img>; el resto de la app sigue solo para ella', async () => {
+    const corp = async (ruta: string) => (await fetch(BASE + ruta, { redirect: 'manual' })).headers.get('cross-origin-resource-policy');
+    expect(await corp('/svg/excursion-museo?centro=logo')).toBe('cross-origin');
+    expect(await corp('/png/excursion-museo')).toBe('cross-origin');
+    expect(await corp('/excursion-museo')).toBe('same-origin');
+    expect(await corp('/entrar')).toBe('same-origin');
+  });
+
   it('el SVG del QR no pide nada a la red (sirve guardado, sin conexión)', async () => {
     for (const consulta of ['', '?marco=escaneame&centro=logo', '?marco=nombre']) {
       const svg = (await pedir(`/svg/excursion-museo${consulta}`)).texto;
