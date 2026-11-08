@@ -163,7 +163,8 @@ curl -s 'https://enlaces.colegio.example/svg/MKQT?fondo=transparente&color=princ
 - Un valor que no está en la lista se ignora y vale el de por defecto.
 - El SVG no pide nada a la red: el logo va dentro y el texto del marco, en trazos. Se puede guardar y enseñar sin
   conexión, también en navegadores antiguos (es SVG 1.1). Mejor como imagen (`<img>`) que pegado dentro de otra página:
-  el logo lleva sus propios estilos y podrían mezclarse con los de la página.
+  el logo lleva sus propios estilos y podrían mezclarse con los de la página. Otras webs pueden enlazarlo directamente
+  (`<img src="<URL_PUBLICA>/svg/<nombre>">`): estas dos rutas llevan `Cross-Origin-Resource-Policy: cross-origin`.
 - El PNG sale siempre a 600 px de ancho; para pantallas grandes, mejor el SVG, que se ve nítido a cualquier tamaño.
 - `fondo=transparente` solo vale sobre un fondo claro: sobre uno oscuro, los móviles no leen el código.
 

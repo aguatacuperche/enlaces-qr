@@ -94,7 +94,9 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
   // Como en la app anterior: /svg/<nombre> y /png/<nombre> dan el QR, por si alguien los tiene enlazados. Aceptan las
   // opciones del creador por la consulta (?fondo=transparente&color=principal…), para los programas que pintan el QR
   // de sus enlaces; sin consulta, sin marco, como siempre. El PNG sale siempre a 600 px: es pública y sin sesión.
+  // Otras webs pueden ponerlas en un <img>: helmet las dejaría solo para esta (Cross-Origin-Resource-Policy).
   app.get(['/svg/:nombre', '/png/:nombre'], (req, res) => {
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     const r = resolver(req.params.nombre as string);
     if (r.tipo === 'no-existe') return noEncontrado(res, r);
     const nombre = r.tipo === 'ir' || r.tipo === 'pagina' ? (req.params.nombre as string) : r.nombre;
