@@ -19,7 +19,7 @@ import { elementosDe, enlacePorId } from './enlaces.ts';
 import { contarVisita, cuentaComoVisita, recargar, resolver } from './redireccion.ts';
 import { dibujarQR } from './qr/dibujo.ts';
 import { png } from './qr/exportar.ts';
-import { leerOpciones } from './qr/opciones.ts';
+import { leerOpciones, POR_DEFECTO } from './qr/opciones.ts';
 import { cargarMarca, cssDeMarca, ficheroDeMarca } from './marca.ts';
 import { pngEslabonRoto } from './ilustracion.ts';
 
@@ -91,12 +91,14 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
   app.use(rutasDeEntrada(bd));
   app.use('/panel', rutasDelPanel(bd, cartero));
 
-  // Como en la app anterior: /svg/<nombre> y /png/<nombre> dan el QR, por si alguien los tiene enlazados.
+  // Como en la app anterior: /svg/<nombre> y /png/<nombre> dan el QR, por si alguien los tiene enlazados. Aceptan las
+  // opciones del creador por la consulta (?fondo=transparente&color=principal…), para los programas que pintan el QR
+  // de sus enlaces; sin consulta, sin marco, como siempre. El PNG sale siempre a 600 px: es pública y sin sesión.
   app.get(['/svg/:nombre', '/png/:nombre'], (req, res) => {
     const r = resolver(req.params.nombre as string);
     if (r.tipo === 'no-existe') return noEncontrado(res, r);
     const nombre = r.tipo === 'ir' || r.tipo === 'pagina' ? (req.params.nombre as string) : r.nombre;
-    const svg = dibujarQR(urlCorta(nombre), leerOpciones({ marco: 'no' }), nombre);
+    const svg = dibujarQR(urlCorta(nombre), leerOpciones(req.query, { ...POR_DEFECTO, marco: 'no' }), nombre);
     res.set('Cache-Control', 'public, max-age=3600');
     if (req.path.startsWith('/svg/')) res.type('image/svg+xml').send(svg);
     else res.type('image/png').send(png(svg, 600));

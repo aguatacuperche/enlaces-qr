@@ -30,7 +30,8 @@ les sacan un QR con los colores del centro y ven cuántas visitas tienen.
 - **Ayuda**: una tarjeta de bienvenida la primera vez y una página con las dudas frecuentes.
 - **Visitas sin datos personales**: un contador por enlace y día, sin IP, sin cookies y sin nada de quien visita. No
   cuentan los robots ni las vistas previas de WhatsApp y similares.
-- `/svg/<nombre>` y `/png/<nombre>` dan el QR de un enlace, por si alguien los tiene enlazados.
+- `/svg/<nombre>` y `/png/<nombre>` dan el QR de un enlace, por si alguien los tiene enlazados, y aceptan las opciones
+  del creador por la consulta (colores, puntos, esquinas, logo, fondo transparente, marco). Ver «El QR de un enlace».
 - **API para otros programas**, compatible con la de YOURLS: el aula virtual, una app de comedor o de biblioteca
   pueden crear sus enlaces cortos, cada uno con su llave. Cada llave solo crea enlaces hacia los dominios que se le
   digan y tiene un tope por minuto; sus enlaces salen en el panel a nombre del programa. Ver más abajo.
@@ -128,6 +129,8 @@ Contesta `"message":"success: updated"` (200), o `"error: not found"` (404) si n
 
 Además:
 
+- Las respuestas que llevan `shorturl` traen también `qrsvg` y `qrpng`, las direcciones del QR de ese enlace (ver «El
+  QR de un enlace»). Un YOURLS normal no las trae: así el programa sabe si el acortador dibuja el QR o lo dibuja él.
 - `format=simple` devuelve solo el enlace corto (o el mensaje de error), en texto.
 - Los errores llevan `"status":"fail"`, un `code` y su estado HTTP: 403 si falta la llave o no vale (`error:auth`),
   405 por GET, 415 con `multipart/form-data`, 429 si se pasa del tope por minuto (`error:limit`).
@@ -137,6 +140,32 @@ Además:
 - Se comprueban cada semana, como los demás (con HEAD o GET y sin sesión): el destino tiene que aguantarlo sin
   cambiar nada. Si el programa renueva sus direcciones, mejor `update` que dejar la vieja sin servir, o saldrá como
   enlace que no abre.
+
+### El QR de un enlace
+
+`<URL_PUBLICA>/svg/<nombre>` y `<URL_PUBLICA>/png/<nombre>` dan el QR de un enlace, sin llave ni sesión.
+Sin consulta salen como siempre: con los colores de la marca, sin marco y con fondo blanco. Con consulta, las mismas
+opciones que el creador del panel:
+
+| Opción | Valores (el primero, por defecto) |
+|---|---|
+| `color` | `marca` (los colores de la marca combinados), `principal`, `segundo`, `tercero`, `oscuro` |
+| `puntos` | `redondeados`, `circulos`, `cuadrados` |
+| `esquinas` | `redondeadas`, `circulo`, `cuadradas` |
+| `centro` | `logo` (el isotipo del centro), `nada` |
+| `fondo` | `blanco`, `transparente` |
+| `marco` | `no`, `escaneame`, `nombre` (la dirección corta), `libre` (con `texto`, hasta 28 letras) |
+
+```sh
+curl -s 'https://enlaces.colegio.example/svg/MKQT?fondo=transparente&color=principal&centro=logo' -o qr.svg
+```
+
+- Un valor que no está en la lista se ignora y vale el de por defecto.
+- El SVG no pide nada a la red: el logo va dentro y el texto del marco, en trazos. Se puede guardar y enseñar sin
+  conexión, también en navegadores antiguos (es SVG 1.1). Mejor como imagen (`<img>`) que pegado dentro de otra página:
+  el logo lleva sus propios estilos y podrían mezclarse con los de la página.
+- El PNG sale siempre a 600 px de ancho; para pantallas grandes, mejor el SVG, que se ve nítido a cualquier tamaño.
+- `fondo=transparente` solo vale sobre un fondo claro: sobre uno oscuro, los móviles no leen el código.
 
 ## Desarrollo en local
 
