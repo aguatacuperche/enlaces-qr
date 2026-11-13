@@ -37,7 +37,8 @@ export function crearCartero(entorno: NodeJS.ProcessEnv = process.env, nombreRem
   if (!usuario || !contrasena) return null;
   // 587 con STARTTLS por defecto: hay proveedores (Hetzner, por ejemplo) que bloquean la salida al 465 y al 25.
   // En cualquier caso, la conexión va siempre cifrada.
-  const puerto = Number(entorno.SMTP_PUERTO || 587);
+  // parseInt: si alguien deja un comentario detrás del número en el .env, vale el número.
+  const puerto = Number.parseInt(entorno.SMTP_PUERTO || '587', 10) || 587;
   const t = nodemailer.createTransport({
     host: entorno.SMTP_HOST || 'smtp.gmail.com', port: puerto, secure: puerto === 465, requireTLS: puerto !== 465,
     auth: { user: usuario, pass: contrasena },

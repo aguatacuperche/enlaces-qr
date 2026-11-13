@@ -12,6 +12,7 @@ process.env.URL_PUBLICA = BASE;
 process.env.ENTRADA_DE_PRUEBA = 'si';
 process.env.DOMINIO_CORREO = 'colegio.example';
 process.env.CORREOS_EXCLUIDOS = '\\d';
+process.env.ADMINISTRADORES = 'jefe.estudios@colegio.example';
 // La comprobación de destinos se prueba contra un servidor local y sin la ronda periódica.
 process.env.COMPROBAR_RED_INTERNA = 'si';
 process.env.COMPROBAR_ENLACES = 'no';
@@ -24,7 +25,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL_PRUEBAS ?? 'postgres://enlac
 
 const { conectar, migrar } = await import('../src/db.ts');
 const { crearApp } = await import('../src/servidor.ts');
-const { recargar } = await import('../src/redireccion.ts');
+const { recargar, volcarVisitas } = await import('../src/redireccion.ts');
 const { enviarInformes, contexto } = await import('../src/informe.ts');
 const { crearCartero } = await import('../src/correo.ts');
 const { cambiarDueno } = await import('../src/enlaces.ts');
@@ -78,7 +79,11 @@ async function entrarComo(correo: string) {
   return r.galleta!;
 }
 
-const visitas = async (id: number) => (await bd.query<{ n: number }>('select coalesce(sum(total), 0)::int as n from visitas where enlace_id = $1', [id])).rows[0].n;
+// Las visitas se cuentan en memoria y se guardan cada pocos segundos: antes de mirar, se guardan ya.
+const visitas = async (id: number) => {
+  await volcarVisitas(bd);
+  return (await bd.query<{ n: number }>('select coalesce(sum(total), 0)::int as n from visitas where enlace_id = $1', [id])).rows[0].n;
+};
 
 describe('redirección', () => {
   it('lleva al destino sin distinguir mayúsculas', async () => {
@@ -96,6 +101,15 @@ describe('redirección', () => {
     expect((await pedir('/oton%CC%83o')).destino).toBe('https://drive.example.com/audio');
     expect((await pedir('/+DATOS')).destino).toBe('https://drive.example.com/tarifas');
     expect((await pedir('/%2BDATOS')).destino).toBe('https://drive.example.com/tarifas');
+  });
+
+  it('no sugiere nombres automáticos ni para lo que piden los robots', async () => {
+    await bd.query("insert into enlaces (nombre, destino, titulo, usuario_id) values ('MKQT', 'https://docs.example.com/privado', 'Privado', $1)", [ids.ana]);
+    await recargar(bd);
+    const cerca = await pedir('/MKQA');
+    expect(cerca.estado).toBe(404);
+    expect(cerca.texto).not.toContain('MKQT');
+    expect((await pedir('/excursion-museo.php')).texto).not.toContain('¿Querías decir');
   });
 
   it('enseña una página amable si no existe, está en pausa o ha caducado', async () => {
@@ -205,8 +219,34 @@ describe('entrada', () => {
     expect((await pedir('/marca/fondo-informe.png')).tipo).toContain('image/png');
   });
 
-  it('el panel pide haber entrado', async () => {
-    expect((await pedir('/panel')).destino).toBe('/');
+  it('el panel pide haber entrado, y al entrar lleva adonde se iba', async () => {
+    const fuera = await pedir(`/panel/enlaces/${ids.museo}`);
+    expect(fuera.destino).toBe('/');
+    const r = await pedir('/entrar/prueba', { galleta: fuera.galleta, cuerpo: { correo: 'ana.perez@colegio.example' } });
+    expect(r.destino).toBe(`/panel/enlaces/${ids.museo}`);
+  });
+
+  it('los correos de ADMINISTRADORES entran como administradores (así se nombra al primero)', async () => {
+    const g = await entrarComo('jefe.estudios@colegio.example');
+    expect((await pedir('/panel/usuarios', { galleta: g })).estado).toBe(200);
+  });
+
+  it('a quien se le quita el acceso, se le cierran las sesiones y no puede volver a entrar', async () => {
+    const pedro = await entrarComo('pedro.leon@colegio.example');
+    expect((await pedir('/panel', { galleta: pedro })).estado).toBe(200);
+    const admin = await entrarComo('luis.gomez@colegio.example');
+    const { rows: [u] } = await bd.query<{ id: number }>("select id from usuarios where correo = 'pedro.leon@colegio.example'");
+    expect((await pedir(`/panel/usuarios/${u.id}/acceso`, { galleta: admin, cuerpo: { bloqueado: 'si' } })).estado).toBe(302);
+    expect((await pedir('/panel', { galleta: pedro })).destino).toBe('/');
+    const otra = await pedir('/entrar/prueba', { cuerpo: { correo: 'pedro.leon@colegio.example' } });
+    expect(otra.estado).toBe(403);
+    expect(otra.texto).toContain('ya no tiene acceso');
+    // Nadie se lo quita a sí mismo, y se puede devolver.
+    const { rows: [luis] } = await bd.query<{ id: number }>("select id from usuarios where correo = 'luis.gomez@colegio.example'");
+    await pedir(`/panel/usuarios/${luis.id}/acceso`, { galleta: admin, cuerpo: { bloqueado: 'si' } });
+    expect((await pedir('/panel/usuarios', { galleta: admin })).estado).toBe(200);
+    await pedir(`/panel/usuarios/${u.id}/acceso`, { galleta: admin, cuerpo: { bloqueado: 'no' } });
+    expect((await pedir('/entrar/prueba', { cuerpo: { correo: 'pedro.leon@colegio.example' } })).estado).toBe(302);
   });
 
   it('rechaza formularios que no vienen de la propia app', async () => {
@@ -214,6 +254,9 @@ describe('entrada', () => {
     const r = await pedir('/panel/enlaces', { galleta: g, cuerpo: { destino: 'https://example.com', nombre: 'otro-sitio' }, origen: 'https://malo.example.com' });
     expect(r.estado).toBe(403);
     expect((await pedir('/panel/enlaces', { galleta: g, cuerpo: { destino: 'https://example.com', nombre: 'sin-origen' }, origen: null })).estado).toBe(403);
+    // El mismo servidor con otro esquema tampoco vale.
+    const esquema = await pedir('/panel/enlaces', { galleta: g, cuerpo: { destino: 'https://example.com', nombre: 'otro-esquema' }, origen: BASE.replace('http:', 'https:') });
+    expect(esquema.estado).toBe(403);
   });
 });
 

@@ -34,7 +34,7 @@ async function pedir(ruta: string, op: { galleta?: string; cuerpo?: Record<strin
     method: op.metodo ?? (op.cuerpo ? 'POST' : 'GET'), headers, redirect: 'manual',
     body: op.cuerpo ? new URLSearchParams(op.cuerpo) : undefined,
   });
-  return { estado: r.status, destino: r.headers.get('location'), tipo: r.headers.get('content-type') ?? '', texto: await r.text(), galleta: r.headers.get('set-cookie')?.split(';')[0] };
+  return { estado: r.status, destino: r.headers.get('location'), tipo: r.headers.get('content-type') ?? '', texto: await r.text(), galleta: r.headers.get('set-cookie')?.split(';')[0], reintentar: r.headers.get('retry-after') };
 }
 
 /** Lo que manda un programa: sin cookie ni cabecera Origin. */
@@ -199,8 +199,11 @@ describe('API compatible con YOURLS', () => {
     // También con el nombre solo, y conserva el título si no se manda otro.
     await api({ action: 'update', shorturl: r.json.url.keyword.toLowerCase(), url: 'https://aula.colegio.example/k.php?t=otra', signature: comedor.llave });
     expect((await programaDe(r.json.url.keyword)).destino).toBe('https://aula.colegio.example/k.php?t=otra');
+    // El de un profesor: no es suyo (403), que no es lo mismo que no exista (404).
     const ajeno = await api({ action: 'update', shorturl: 'excursion-museo', url: 'https://aula.colegio.example/robado', signature: comedor.llave });
-    expect(ajeno.estado).toBe(404);
+    expect(ajeno.estado).toBe(403);
+    expect(ajeno.json.code).toBe('error:notyours');
+    expect((await api({ action: 'update', shorturl: 'no-existe-nada', url: 'https://aula.colegio.example/x', signature: comedor.llave })).estado).toBe(404);
     expect((await pedir('/excursion-museo')).destino).toBe('https://aula.colegio.example/museo');
     const fuera = await api({ action: 'update', shorturl: r.json.shorturl, url: 'https://malo.example/', signature: comedor.llave });
     expect(fuera.json.code).toBe('error:domain');
@@ -268,6 +271,38 @@ describe('los enlaces de un programa en el panel', () => {
     await pedir(`/panel/enlaces/${e.id}/dueno`, { galleta: admin, cuerpo: { usuario: String(ids.ana) } });
     expect(await programaDe('menu-semana')).toMatchObject({ usuario_id: ids.ana, programa_id: null });
     const cambio = await api({ action: 'update', shorturl: 'menu-semana', url: 'https://aula.colegio.example/otra-vez', signature: comedor.llave });
-    expect(cambio.estado).toBe(404);
+    expect(cambio.estado).toBe(403);
+    expect(cambio.json.code).toBe('error:notyours');
+  });
+
+  it('no devuelve un enlace en pausa o caducado como si sirviera, y avisa si cambia uno en pausa', async () => {
+    const r = await api({ action: 'shorturl', url: 'https://aula.colegio.example/k.php?t=pausa', signature: comedor.llave });
+    const nombre = r.json.url.keyword;
+    await bd.query('update enlaces set activo = false where lower(nombre) = lower($1)', [nombre]);
+    const otra = await api({ action: 'shorturl', url: 'https://aula.colegio.example/k.php?t=pausa', signature: comedor.llave });
+    expect(otra.json.status).toBe('success');
+    expect(otra.json.url.keyword).not.toBe(nombre);
+    const cambio = await api({ action: 'update', shorturl: nombre, url: 'https://aula.colegio.example/k.php?t=pausa2', signature: comedor.llave });
+    expect(cambio.json).toMatchObject({ status: 'success', active: false });
+  });
+
+  it('contesta a version y a expand (solo con sus enlaces), y el 429 dice cuándo volver', async () => {
+    expect((await api({ action: 'version', signature: comedor.llave })).json.version).toBeTruthy();
+    const r = await api({ action: 'shorturl', url: 'https://aula.colegio.example/k.php?t=expand', signature: comedor.llave });
+    const exp = await api({ action: 'expand', shorturl: r.json.shorturl, signature: comedor.llave });
+    expect(exp.json).toMatchObject({ longurl: 'https://aula.colegio.example/k.php?t=expand', keyword: r.json.url.keyword, active: true });
+    expect((await api({ action: 'expand', shorturl: 'excursion-museo', signature: comedor.llave })).estado).toBe(404);
+    const lento = await nuevoPrograma('Tope', 'aula.colegio.example', '1');
+    await api({ action: 'version', signature: lento.llave });
+    const parado = await pedir('/yourls-api.php', { cuerpo: { format: 'json', action: 'version', signature: lento.llave }, origen: null });
+    // Salvo que justo cambie el minuto entre las dos.
+    if (parado.estado === 429) expect(Number(parado.reintentar)).toBeGreaterThan(0);
+  });
+
+  it('rechaza destinos demasiado largos o con caracteres invisibles', async () => {
+    const largo = await api({ action: 'shorturl', url: 'https://aula.colegio.example/' + 'x'.repeat(3000), signature: comedor.llave });
+    expect(largo.json.code).toBe('error:nourl');
+    const raro = await api({ action: 'shorturl', url: '\u0001https://aula.colegio.example/x', signature: comedor.llave });
+    expect(raro.json.code).toBe('error:nourl');
   });
 });

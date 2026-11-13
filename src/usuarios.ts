@@ -2,19 +2,35 @@
 import type { Bd } from './db.ts';
 import { normalizarCorreo } from './acceso.ts';
 
-export type Usuario = { id: number; correo: string; nombre: string; admin: boolean; preferencias_qr: Record<string, string> | null; ayuda_cerrada: boolean };
+export type Usuario = {
+  id: number; correo: string; nombre: string; admin: boolean; preferencias_qr: Record<string, string> | null; ayuda_cerrada: boolean;
+  /** Un administrador le ha quitado el acceso. */
+  bloqueado: boolean;
+};
 
 export type UsuarioConEnlaces = Usuario & { enlaces: number; con_problemas: number; ultimo_informe: Date | null; ultima_entrada: Date | null };
 
-const CAMPOS = 'id, correo, nombre, admin, preferencias_qr, ayuda_cerrada';
+const CAMPOS = 'id, correo, nombre, admin, preferencias_qr, ayuda_cerrada, bloqueado';
 
-/** Llamar solo después de comprobar `puedeEntrar`. Sin nombre, se conserva el que ya tenía (o se usa el correo). */
-export async function registrarEntrada(bd: Bd, correo: string, nombre: string): Promise<Usuario> {
+/**
+ * Llamar solo después de comprobar `puedeEntrar`. Sin nombre, se conserva el que ya tenía (o se usa el correo).
+ * Con `admin`, pasa a ser administrador (los de la variable ADMINISTRADORES); si no, se queda como estaba. A quien
+ * tiene el acceso quitado no se le apunta la entrada: la rechaza quien llama.
+ */
+export async function registrarEntrada(bd: Bd, correo: string, nombre: string, admin = false): Promise<Usuario> {
   const { rows } = await bd.query<Usuario>(
-    `insert into usuarios (correo, nombre, ultima_entrada) values ($1, coalesce(nullif($2, ''), $1), now())
-     on conflict (correo) do update set nombre = coalesce(nullif($2, ''), usuarios.nombre), ultima_entrada = now()
-     returning ${CAMPOS}`, [normalizarCorreo(correo), nombre.trim()]);
+    `insert into usuarios (correo, nombre, ultima_entrada, admin) values ($1, coalesce(nullif($2, ''), $1), now(), $3)
+     on conflict (correo) do update set nombre = case when usuarios.bloqueado then usuarios.nombre else coalesce(nullif($2, ''), usuarios.nombre) end,
+       ultima_entrada = case when usuarios.bloqueado then usuarios.ultima_entrada else now() end,
+       admin = usuarios.admin or ($3 and not usuarios.bloqueado)
+     returning ${CAMPOS}`, [normalizarCorreo(correo), nombre.trim(), admin]);
   return rows[0];
+}
+
+/** Quita o devuelve el acceso. Al quitarlo, deja de ser administrador y se cierran todas sus sesiones abiertas. */
+export async function cambiarAcceso(bd: Bd, id: number, bloqueado: boolean): Promise<void> {
+  await bd.query('update usuarios set bloqueado = $2, admin = admin and not $2 where id = $1', [id, bloqueado]);
+  if (bloqueado) await bd.query(`delete from sesiones where (sess->>'usuarioId')::int = $1`, [id]);
 }
 
 export async function usuarioPorId(bd: Bd, id: number): Promise<Usuario | undefined> {
@@ -24,7 +40,7 @@ export async function usuarioPorId(bd: Bd, id: number): Promise<Usuario | undefi
 /** Con cuántos enlaces activos que necesitan revisión tiene cada uno y cuándo recibió el último informe. */
 export async function listarUsuarios(bd: Bd): Promise<UsuarioConEnlaces[]> {
   return (await bd.query<UsuarioConEnlaces>(
-    `select u.id, u.correo, u.nombre, u.admin, u.preferencias_qr, u.ultima_entrada,
+    `select u.id, u.correo, u.nombre, u.admin, u.preferencias_qr, u.ultima_entrada, u.bloqueado,
             (select count(*)::int from enlaces e where e.usuario_id = u.id) as enlaces,
             (select count(*)::int from enlaces e where e.usuario_id = u.id and e.activo
                and ((e.problema is not null and not e.aviso_ignorado)
@@ -34,7 +50,7 @@ export async function listarUsuarios(bd: Bd): Promise<UsuarioConEnlaces[]> {
 }
 
 export async function cambiarAdmin(bd: Bd, id: number, admin: boolean): Promise<void> {
-  await bd.query('update usuarios set admin = $2 where id = $1', [id, admin]);
+  await bd.query('update usuarios set admin = $2 and not bloqueado where id = $1', [id, admin]);
 }
 
 /**

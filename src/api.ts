@@ -10,10 +10,16 @@ import express, { type Request } from 'express';
 import type { Bd } from './db.ts';
 import { config, urlCorta } from './config.ts';
 import {
-  actualizarEnlace, crearEnlace, enlacePorId, ErrorDeFormulario, nombreAutomaticoLibre, problemaConDestino, type Enlace,
+  actualizarEnlace, crearEnlace, enlacePorId, ErrorDeFormulario, estadoDe, nombreAutomaticoLibre, problemaConDestino, type Enlace,
 } from './enlaces.ts';
-import { apuntarUso, enlaceDelPrograma, enlaceDelProgramaHacia, programaPorLlave, type ProgramaActivo } from './programas.ts';
-import { recargar } from './redireccion.ts';
+import {
+  apuntarUso, enlaceDelPrograma, enlaceDelProgramaHacia, enlacesDelPrograma, programaPorLlave, type ProgramaActivo,
+} from './programas.ts';
+import { refrescarEnlace } from './redireccion.ts';
+import { clave } from './nombres.ts';
+
+/** Enlaces que puede tener un programa: uno con un fallo no puede llenar la base ni la memoria. */
+export const MAX_ENLACES_POR_PROGRAMA = 10_000;
 
 type Respuesta = Record<string, unknown> & { statusCode: number };
 
@@ -71,6 +77,9 @@ async function acortar(bd: Bd, p: ProgramaActivo, url: string, keyword: string, 
       title: ya.titulo, ...direcciones(ya.nombre), url: datosDe(ya), statusCode: 200,
     };
   }
+  if (await enlacesDelPrograma(bd, p.id) >= MAX_ENLACES_POR_PROGRAMA) {
+    return fallo(403, 'error:max', `Este programa ya tiene ${MAX_ENLACES_POR_PROGRAMA} enlaces, el máximo. Que un administrador borre los que ya no se usen.`);
+  }
   let id: number | undefined;
   // Sin nombre pedido, el automático; si justo lo ha cogido otro a la vez, se prueba con otro.
   for (let intento = 0; id === undefined; intento++) {
@@ -82,7 +91,7 @@ async function acortar(bd: Bd, p: ProgramaActivo, url: string, keyword: string, 
       return fallo(400, e.campo === 'nombre' ? 'error:keyword' : 'error:nourl', e.message);
     }
   }
-  await recargar(bd);
+  await refrescarEnlace(bd, id);
   const e = (await enlacePorId(bd, id))!;
   return { status: 'success', message: `${url} añadido`, title: e.titulo, ...direcciones(e.nombre), url: datosDe(e), statusCode: 200 };
 }
@@ -98,17 +107,38 @@ function nombreDe(shorturl: string): string {
 /** Cambiar el destino (y el título, si viene) de un enlace del programa, con las respuestas de «edit url». */
 async function cambiar(bd: Bd, p: ProgramaActivo, shorturl: string, url: string, title: string): Promise<Respuesta> {
   if (!shorturl || !url) return { status: 'fail', code: 'error:missing', message: 'error: missing param', simple: 'Faltan shorturl o url.', statusCode: 400 };
-  const e = await enlaceDelPrograma(bd, p.id, nombreDe(shorturl));
-  if (!e) return { status: 'fail', code: 'error:notfound', message: 'error: not found', simple: `${shorturl} no existe o no es de este programa.`, statusCode: 404 };
+  const nombre = nombreDe(shorturl);
+  const e = await enlaceDelPrograma(bd, p.id, nombre);
+  if (!e) {
+    // Existe, pero ya no es del programa (un administrador se lo ha pasado a un profesor): que el programa lo sepa y no
+    // dé por cambiado un enlace que sigue llevando al destino viejo.
+    const deOtro = (await bd.query('select 1 from enlaces where lower(nombre) = $1', [clave(nombre)])).rowCount;
+    if (deOtro) return { status: 'fail', code: 'error:notyours', message: 'error: not yours', simple: `${shorturl} ya no es de este programa: lo lleva una persona del centro.`, statusCode: 403 };
+    return { status: 'fail', code: 'error:notfound', message: 'error: not found', simple: `${shorturl} no existe.`, statusCode: 404 };
+  }
   const problema = problemaDeDestino(p, url);
   if (problema) return { ...fallo(400, problema.startsWith('Este programa') ? 'error:domain' : 'error:nourl', problema), simple: problema };
   await actualizarEnlace(bd, e.id, {
     nombre: e.nombre, destino: url, titulo: title || e.titulo, etiqueta: e.etiqueta ?? '', caduca: e.caduca ?? '', activo: e.activo,
   });
-  await recargar(bd);
+  await refrescarEnlace(bd, e.id);
+  // Si está en pausa o caducado, el cambio se guarda pero el enlace sigue sin abrir: `active` lo dice.
+  const active = estadoDe(e) === 'activo';
   return {
-    status: 'success', message: 'success: updated', simple: `${urlCorta(e.nombre)} lleva ahora a ${url}`,
-    ...direcciones(e.nombre), url: { keyword: e.nombre, url, title: title || e.titulo }, statusCode: 200,
+    status: 'success', message: 'success: updated',
+    simple: active ? `${urlCorta(e.nombre)} lleva ahora a ${url}` : `${urlCorta(e.nombre)} cambiado, pero está en pausa o caducado: no abre.`,
+    ...direcciones(e.nombre), url: { keyword: e.nombre, url, title: title || e.titulo }, active, statusCode: 200,
+  };
+}
+
+/** Como «expand» de YOURLS, pero solo con los enlaces del propio programa: los demás no son cosa suya. */
+async function expandir(bd: Bd, p: ProgramaActivo, shorturl: string): Promise<Respuesta> {
+  if (!shorturl) return { ...fallo(400, 'error:missing', 'error: missing param'), simple: 'Falta shorturl.' };
+  const e = await enlaceDelPrograma(bd, p.id, nombreDe(shorturl));
+  if (!e) return { ...fallo(404, 'error:notfound', 'error: not found'), simple: `${shorturl} no existe o no es de este programa.` };
+  return {
+    message: 'success', keyword: e.nombre, shorturl: urlCorta(e.nombre), longurl: e.destino, title: e.titulo,
+    active: estadoDe(e) === 'activo', simple: e.destino ?? '', statusCode: 200,
   };
 }
 
@@ -129,7 +159,10 @@ export function rutasDeLaApi(bd: Bd) {
 
     const p = await programaPorLlave(bd, campo(req, 'signature'));
     if (!p) return responderFallo(fallo(403, 'error:auth', 'Falta la llave (signature) o no es válida.'));
-    if (!dentroDelTope(p)) return responderFallo(fallo(429, 'error:limit', `Como mucho ${p.por_minuto} peticiones por minuto.`));
+    if (!dentroDelTope(p)) {
+      res.set('Retry-After', String(60 - new Date().getSeconds()));
+      return responderFallo(fallo(429, 'error:limit', `Como mucho ${p.por_minuto} peticiones por minuto.`));
+    }
     await apuntarUso(bd, p.id);
 
     const accion = campo(req, 'action');
@@ -141,7 +174,13 @@ export function rutasDeLaApi(bd: Bd) {
       const o = await cambiar(bd, p, campo(req, 'shorturl'), campo(req, 'url'), campo(req, 'title'));
       return responder(o, String(o.simple));
     }
-    responderFallo(fallo(400, 'error:action', 'Acción desconocida: usa shorturl o update.'));
+    if (accion === 'expand') {
+      const o = await expandir(bd, p, campo(req, 'shorturl'));
+      return responder(o, String(o.simple));
+    }
+    // Hay clientes que prueban la conexión pidiendo la versión.
+    if (accion === 'version') return responder({ version: '1.9.2', message: 'enlaces-qr, compatible con la API de YOURLS', statusCode: 200 }, '1.9.2');
+    responderFallo(fallo(400, 'error:action', 'Acción desconocida: usa shorturl, update, expand o version.'));
   });
   return r;
 }

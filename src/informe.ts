@@ -299,8 +299,11 @@ export async function enviarInformes(bd: Bd, cartero: Cartero, mes: string, cx: 
 
 let enMarcha = false;
 
+/** INFORME_MENSUAL=no lo apaga (también si alguien deja un comentario detrás del «no» en el .env). */
+export const informeApagado = () => /^no\b/i.test(process.env.INFORME_MENSUAL?.trim() ?? '');
+
 export function iniciarInformes(bd: Bd, cartero: Cartero | null, cx: () => Contexto): void {
-  if (process.env.INFORME_MENSUAL === 'no') return;
+  if (informeApagado()) return;
   if (!cartero) {
     console.log('Informe mensual por correo desactivado: falta SMTP_USUARIO y SMTP_CONTRASENA.');
     return;

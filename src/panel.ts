@@ -11,15 +11,15 @@ import { comprobarEnlace } from './comprobador.ts';
 import type { Opciones as OpcionesComprobacion } from './comprobacion.ts';
 import { config } from './config.ts';
 import { problemaConNombre } from './nombres.ts';
-import { recargar } from './redireccion.ts';
-import { cambiarAdmin, cerrarAyuda, guardarPreferenciasQR, listarUsuarios, pasarEnlaces, type Usuario } from './usuarios.ts';
+import { refrescarEnlace } from './redireccion.ts';
+import { cambiarAcceso, cambiarAdmin, cerrarAyuda, guardarPreferenciasQR, listarUsuarios, pasarEnlaces, type Usuario } from './usuarios.ts';
 import { urlCorta } from './config.ts';
 import { dibujarQR } from './qr/dibujo.ts';
 import { pdf, png, seLee } from './qr/exportar.ts';
 import { aConsulta, leerOpciones, pixelesDe, POR_DEFECTO, TAMANOS, type Opciones } from './qr/opciones.ts';
 import { cartel, HOJAS, pegatinas, problemaConHoja, type Hoja } from './qr/impresion.ts';
 import type { Cartero } from './correo.ts';
-import { contexto, destinatarios, enviarUno, momento, proximoEnvio } from './informe.ts';
+import { contexto, destinatarios, enviarUno, informeApagado, momento, proximoEnvio } from './informe.ts';
 import {
   cambiarLlave, cambiarPrograma, crearPrograma, listarProgramas, programaPorId, retirarPrograma, type DatosPrograma,
 } from './programas.ts';
@@ -27,7 +27,7 @@ import {
 /** La hoja de pegatinas pedida: uno de los formatos habituales o una a medida (campos m_*). */
 function hojaDesde(q: Request['query']): { hoja: Hoja; problema: string | null } {
   const clave = texto(q.hoja);
-  if (clave !== 'medida') return { hoja: HOJAS[clave] ?? Object.values(HOJAS)[0], problema: null };
+  if (clave !== 'medida') return { hoja: Object.hasOwn(HOJAS, clave) ? HOJAS[clave] : Object.values(HOJAS)[0], problema: null };
   const n = (k: string, d: number) => {
     const v = texto(q[k]).replace(',', '.').trim();
     return v === '' ? d : Number(v);
@@ -77,7 +77,8 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
 
   /** El enlace, si este usuario lo puede tocar (el suyo, o cualquiera si es administrador). */
   async function enlaceDe(req: Request, res: Response): Promise<Enlace | undefined> {
-    const e = await enlacePorId(bd, Number(req.params.id));
+    const id = /^\d{1,9}$/.test(String(req.params.id)) ? Number(req.params.id) : NaN;
+    const e = Number.isNaN(id) ? undefined : await enlacePorId(bd, id);
     const u = usuarioDe(res);
     if (e && (u.admin || e.usuario_id === u.id)) return e;
     res.status(404).render('error', { titulo: 'No encontrado', mensaje: 'Ese enlace no existe o no es tuyo.' });
@@ -127,7 +128,7 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
     const datos = { nombre: texto(req.body.nombre), destino: texto(req.body.destino), titulo: texto(req.body.titulo), etiqueta: texto(req.body.etiqueta) };
     try {
       const id = await crearEnlace(bd, usuarioDe(res).id, datos);
-      await recargar(bd);
+      await refrescarEnlace(bd, id);
       comprobarEnSegundoPlano(bd, id);
       res.redirect(`/panel?creado=${id}`);
     } catch (e) {
@@ -155,7 +156,7 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
 
   r.post('/paginas', async (_req, res) => {
     const id = await crearPagina(bd, usuarioDe(res).id);
-    await recargar(bd);
+    await refrescarEnlace(bd, id);
     res.redirect(`/panel/enlaces/${id}?nueva=1`);
   });
 
@@ -174,7 +175,7 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
       } else {
         await actualizarEnlace(bd, e.id, datos);
       }
-      await recargar(bd);
+      await refrescarEnlace(bd, e.id);
       comprobarEnSegundoPlano(bd, e.id);
       res.redirect(`/panel/enlaces/${e.id}?guardado=1`);
     } catch (err) {
@@ -189,7 +190,7 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
     const e = await enlaceDe(req, res);
     if (!e) return;
     await cambiarActivo(bd, e.id, !e.activo);
-    await recargar(bd);
+    await refrescarEnlace(bd, e.id);
     res.redirect(volverA(req));
   });
 
@@ -211,7 +212,7 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
     const e = await enlaceDe(req, res);
     if (!e) return;
     await borrarEnlace(bd, e.id);
-    await recargar(bd);
+    await refrescarEnlace(bd, e.id);
     res.redirect('/panel');
   });
 
@@ -297,7 +298,7 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
     const { mes } = momento();
     res.render('usuarios', {
       usuarios: await listarUsuarios(bd), sinDueno: (await recuento(bd, { usuarioId: null })).todos, hecho: req.query.hecho,
-      informe: { correo: !!cartero, apagado: process.env.INFORME_MENSUAL === 'no', remitente: cartero?.remitente ?? '', proximo: proximoEnvio(), mes },
+      informe: { correo: !!cartero, apagado: informeApagado(), remitente: cartero?.remitente ?? '', proximo: proximoEnvio(), mes },
       prueba: texto(req.query.prueba),
     });
   });
@@ -323,6 +324,13 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
     const id = Number(req.params.id);
     // Que nadie se quite a sí mismo: siempre queda al menos un administrador.
     if (id !== usuarioDe(res).id) await cambiarAdmin(bd, id, req.body.admin === 'si');
+    res.redirect('/panel/usuarios');
+  });
+
+  r.post('/usuarios/:id/acceso', exigirAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    // Nadie se quita el acceso a sí mismo.
+    if (id !== usuarioDe(res).id) await cambiarAcceso(bd, id, req.body.bloqueado === 'si');
     res.redirect('/panel/usuarios');
   });
 

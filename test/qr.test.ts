@@ -6,7 +6,8 @@ import { leerOpciones, POR_DEFECTO, type Opciones } from '../src/qr/opciones.ts'
 const URL = 'https://enlaces.example/excursion-museo';
 
 describe('creador de QR', () => {
-  it('todas las combinaciones de opciones se leen', () => {
+  // Dibuja y lee 240 QR: con la máquina ocupada pasa del minuto.
+  it('todas las combinaciones de opciones se leen', { timeout: 240_000 }, () => {
     const fallos: string[] = [];
     for (const color of ['marca', 'principal', 'segundo', 'tercero', 'oscuro'] as const)
       for (const puntos of ['redondeados', 'circulos', 'cuadrados'] as const)

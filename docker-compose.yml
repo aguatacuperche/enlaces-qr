@@ -14,7 +14,14 @@ services:
     volumes:
       # La marca del centro (marca.json, logo.svg, isotipo.svg). Sin MARCA_DIR, la de ejemplo.
       - ${MARCA_DIR:-./marca-ejemplo}:/app/marca:ro
+    # Con 256 MB, Node lleva un tope de 128 MB (ver Dockerfile): si se cambia uno, cambiar el otro.
     mem_limit: 256m
+    pids_limit: 100
+    # La app no escribe en el disco: todo va a la base de datos.
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     networks: [proxy, bd]
 
 networks:

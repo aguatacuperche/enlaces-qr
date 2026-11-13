@@ -10,6 +10,8 @@
           <b>Esta cuenta no tiene acceso</b><%= dominio %> es solo para los profesores del centro. Has entrado con <strong><%= rechazo.correo %></strong>.
         <% } else if (rechazo.motivo === 'otro-dominio') { %>
           <b>Esa cuenta no es del centro</b>Entra con tu cuenta @<%= dominioCorreo %><% if (rechazo.correo) { %>, no con <strong><%= rechazo.correo %></strong><% } %>.
+        <% } else if (rechazo.motivo === 'bloqueado') { %>
+          <b>Esta cuenta ya no tiene acceso</b>Un administrador le ha quitado el acceso a <strong><%= rechazo.correo %></strong>. Si es un error, pídele que te lo devuelva.
         <% } else if (rechazo.motivo === 'sin-verificar') { %>
           <b>Google no ha confirmado tu correo</b>Prueba otra vez o entra con otra cuenta.
         <% } else { %>

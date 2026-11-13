@@ -11,6 +11,9 @@
  * hacia sus propios servicios.
  */
 import dns from 'node:dns/promises';
+import { lookup as dnsLookup, type LookupAddress, type LookupAllOptions } from 'node:dns';
+import http from 'node:http';
+import https from 'node:https';
 import net from 'node:net';
 
 export type Codigo = 'no-existe' | 'no-responde' | 'error' | 'pide-sesion' | 'formulario-cerrado';
@@ -36,7 +39,7 @@ for (const red of ['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '1
 }
 // Ojo: no añadir aquí ::ffff:0:0/96. BlockList compara cualquier IPv4 también como IPv4 dentro de IPv6, y ese rango
 // la daría siempre por interna. Las direcciones IPv4 escritas en forma IPv6 se convierten antes de comprobarlas.
-for (const red of ['::1/128', 'fc00::/7', 'fe80::/10']) {
+for (const red of ['::/128', '::1/128', '::/96', '64:ff9b::/96', 'fc00::/7', 'fe80::/10']) {
   const [ip, bits] = red.split('/');
   INTERNAS.addSubnet(ip, Number(bits), 'ipv6');
 }
@@ -62,10 +65,46 @@ const CABECERAS = {
   'accept-language': 'es-ES,es;q=0.9',
 };
 
-async function pedir(url: string, metodo: 'HEAD' | 'GET', op: Opciones): Promise<Response> {
-  const r = await (op.fetch ?? fetch)(url, { method: metodo, redirect: 'manual', headers: CABECERAS, signal: AbortSignal.timeout(op.espera ?? 15_000) });
-  await r.body?.cancel().catch(() => {});  // solo importan el código y la cabecera Location
-  return r;
+/** Lo único que importa de una respuesta: el código y adónde redirige. */
+type Respuesta = { status: number; location: string | null };
+
+/** El destino lleva a la red interna (lo descubre la propia conexión, ver `buscarIp`). */
+class RedInterna extends Error {
+  code = 'EREDINTERNA';
+}
+
+/**
+ * Busca la IP del servidor en el mismo momento de conectar y no deja conectar a una de la red interna. Comprobarlo
+ * antes, con otra consulta, no basta: un DNS malintencionado puede contestar una IP pública a la primera y una interna
+ * a la segunda.
+ */
+function buscarIp(host: string, opciones: LookupAllOptions | object, listo: (e: Error | null, d: string | LookupAddress[], f?: number) => void) {
+  dnsLookup(host, { ...opciones, all: true }, (e, dirs) => {
+    if (e) return listo(e, '');
+    if (dirs.some(d => esIpInterna(d.address))) return listo(new RedInterna(`${host} está en la red interna`), '');
+    if ((opciones as LookupAllOptions).all) return listo(null, dirs);
+    listo(null, dirs[0].address, dirs[0].family);
+  });
+}
+
+function pedir(url: string, metodo: 'HEAD' | 'GET', op: Opciones): Promise<Respuesta> {
+  const espera = op.espera ?? 15_000;
+  if (op.fetch) {
+    return op.fetch(url, { method: metodo, redirect: 'manual', headers: CABECERAS, signal: AbortSignal.timeout(espera) })
+      .then(async r => { await r.body?.cancel().catch(() => {}); return { status: r.status, location: r.headers.get('location') }; });
+  }
+  return new Promise((ok, mal) => {
+    const u = new URL(url);
+    const cliente = u.protocol === 'https:' ? https : http;
+    const pet = cliente.request(u, { method: metodo, headers: CABECERAS, lookup: op.permitirRedInterna ? undefined : buscarIp }, r => {
+      r.destroy();  // solo importan el código y la cabecera Location
+      ok({ status: r.statusCode ?? 0, location: typeof r.headers.location === 'string' ? r.headers.location : null });
+    });
+    pet.setTimeout(espera, () => pet.destroy(Object.assign(new Error('Sin respuesta'), { name: 'TimeoutError' })));
+    // Los fallos de conexión llegan con su código en `cause`, como los de fetch (ver problemaDeConexion).
+    pet.on('error', e => mal(e instanceof RedInterna || e.name === 'TimeoutError' ? e : Object.assign(new Error(e.message), { cause: e })));
+    pet.end();
+  });
 }
 
 /** Identificador de un vídeo de YouTube, si el enlace es de uno. */
@@ -128,17 +167,19 @@ export async function comprobarDestino(url: string, op: Opciones = {}): Promise<
     const u = new URL(actual);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
     if (await esRedInterna(u.hostname, op)) return null;
-    let r: Response;
+    let r: Respuesta;
     try {
       r = await pedir(actual, 'HEAD', op);
       // Hay webs que no contestan bien a HEAD: entonces, la petición normal.
       if (r.status === 405 || r.status === 501 || r.status === 400 || r.status === 403 || r.status === 404) r = await pedir(actual, 'GET', op);
     } catch (e) {
+      if (e instanceof RedInterna) return null;
       return problemaDeConexion(e);
     }
-    const destino = r.headers.get('location');
-    if (r.status >= 300 && r.status < 400 && destino) {
-      actual = new URL(destino, actual).href;
+    if (r.status >= 300 && r.status < 400 && r.location) {
+      // Una redirección a una dirección mal escrita: el navegador tampoco podría seguirla.
+      if (!URL.canParse(r.location, actual)) return { codigo: 'error', detalle: 'La web redirige a una dirección mal escrita.' };
+      actual = new URL(r.location, actual).href;
       continue;
     }
     return veredicto(new URL(actual), r.status);

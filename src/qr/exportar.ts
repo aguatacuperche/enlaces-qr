@@ -14,6 +14,11 @@ export function png(svg: string, ancho: number): Buffer {
   return new resvg.Resvg(svg, { fitTo: { mode: 'width', value: ancho } }).render().asPng();
 }
 
+/** Lo mismo, pero dibujado fuera del hilo principal: mientras, la app sigue atendiendo las redirecciones. */
+export async function pngAparte(svg: string, ancho: number): Promise<Buffer> {
+  return (await resvg.renderAsync(svg, { fitTo: { mode: 'width', value: ancho } })).asPng();
+}
+
 /**
  * Lee el QR como lo haría un móvil y dice si sale la dirección esperada.
  * Ojo: `pixels` copia la imagen entera cada vez que se lee; se lee una sola vez.
