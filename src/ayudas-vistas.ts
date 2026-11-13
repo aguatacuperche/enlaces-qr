@@ -26,9 +26,13 @@ function minigrafico(serie: number[], apagado: boolean): string {
     + `<circle cx="${ux.toFixed(1)}" cy="${uy.toFixed(1)}" r="2.6" fill="${color}"/></svg>`;
 }
 
-/** Barras de visitas por semana. Cada barra lleva su texto para la ayuda al pasar el ratón. */
-function graficoSemanas(semanas: { desde: string; total: number }[]): string {
-  const W = 560, H = 170, iz = 30, ab = 22, ar = 10;
+/**
+ * Barras de visitas por semana. Cada barra lleva su texto para la ayuda al pasar el ratón. El dibujo se estira al
+ * ancho de su tarjeta, y las letras con él: en una tarjeta estrecha (la de una página), `ancho` más pequeño para que
+ * no salgan diminutas.
+ */
+function graficoSemanas(semanas: { desde: string; total: number }[], ancho = 560): string {
+  const W = ancho, H = 170, iz = 30, ab = 22, ar = 10;
   const max = Math.max(4, ...semanas.map(s => s.total));
   const paso = Math.ceil(max / 2), tope = paso * 2;
   const bw = (W - iz) / semanas.length;

@@ -7,7 +7,7 @@
 
   <% const avisosPrueba = {
        enviada: ['bien', 'Te hemos enviado el informe tal como te llegaría. Míralo en tu correo.'],
-       ejemplo: ['bien', 'No tienes enlaces con problemas, así que te hemos enviado un informe de ejemplo con enlaces de otros profesores.'],
+       ejemplo: ['bien', 'No tienes enlaces con problemas, así que te hemos enviado un informe de ejemplo con enlaces de otras personas.'],
        nada: ['bien', 'Ningún enlace del centro tiene problemas ahora mismo: no hay nada que enviar.'],
        'sin-correo': ['mal', 'El envío de correo no está configurado en el servidor (SMTP_USUARIO y SMTP_CONTRASENA).'],
        error: ['mal', 'No se ha podido enviar. Revisa la configuración del correo en el servidor.'],
@@ -21,7 +21,7 @@
       <% } else if (informe.apagado) { %>
         <p>Desactivado en la configuración del servidor (INFORME_MENSUAL=no). La prueba sí se puede enviar, desde <b><%= informe.remitente %></b>.</p>
       <% } else { %>
-        <p>A cada profesor con enlaces que no abren le llega la lista de los suyos el primer lunes de cada mes a las 8:00. Sale de <b><%= informe.remitente %></b>. Próximo envío: <b><%= fechaLarga(informe.proximo) %></b>.</p>
+        <p>A cada persona con enlaces que no abren le llega la lista de los suyos el primer lunes de cada mes a las 8:00. Sale de <b><%= informe.remitente %></b>. Próximo envío: <b><%= fechaLarga(informe.proximo) %></b>.</p>
       <% } %>
     </div>
     <form method="post" action="/panel/usuarios/informe-prueba"><button class="btn suave peq" <%= informe.correo ? '' : 'disabled' %>>Enviarme una prueba</button></form>
@@ -49,16 +49,16 @@
     <% for (const u of usuarios) { %>
       <tr class="<%= u.con_problemas ? 'fila-rota' : '' %><%= u.bloqueado ? ' sin-acceso' : '' %>">
         <td class="nom"><b><%= u.nombre %></b><% if (u.bloqueado) { %> <span class="chip-gris">Sin acceso</span><% } %></td>
-        <td><%= u.correo %></td>
-        <td><%= u.enlaces %></td>
-        <td>
+        <td data-etiqueta="Correo"><%= u.correo %></td>
+        <td data-etiqueta="Enlaces"><%= u.enlaces %></td>
+        <td data-etiqueta="Con problemas">
           <% if (u.con_problemas) { %>
             <span class="chip-problema roto"><svg class="i"><use href="#i-aviso"/></svg><%= u.con_problemas %></span>
             <small class="informe-estado"><%= u.ultimo_informe ? `Último informe: ${fechaCorta(u.ultimo_informe)}` : 'Aún no ha recibido el informe' %></small>
           <% } else { %><span class="chip-gris">Ninguno</span><% } %>
         </td>
-        <td><%= u.ultima_entrada ? fechaCorta(u.ultima_entrada) : 'Aún no ha entrado' %></td>
-        <td>
+        <td data-etiqueta="Última entrada"><%= u.ultima_entrada ? fechaCorta(u.ultima_entrada) : 'Aún no ha entrado' %></td>
+        <td data-etiqueta="Administrador">
           <% if (u.id === usuario.id) { %>
             <span class="chip-gris">Tú</span>
           <% } else { %>
@@ -68,7 +68,7 @@
           </form>
           <% } %>
         </td>
-        <td>
+        <td data-etiqueta="Acceso">
           <% if (u.id !== usuario.id) { %>
           <form method="post" action="/panel/usuarios/<%= u.id %>/acceso" <% if (!u.bloqueado) { %>data-confirmar="¿Quitarle el acceso a <%= u.nombre %>?" data-confirmar-texto="No podrá entrar y se cerrarán sus sesiones abiertas. Sus enlaces siguen funcionando: pásalos a otro arriba." data-confirmar-boton="Quitar el acceso"<% } %>>
             <input type="hidden" name="bloqueado" value="<%= u.bloqueado ? 'no' : 'si' %>">

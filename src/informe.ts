@@ -125,6 +125,18 @@ const MAX_EN_CORREO = 40;
 
 const TIPO = "font-family:'Nunito','Segoe UI',Helvetica,Arial,sans-serif;";
 
+/**
+ * Un botón que también lo es en Outlook de escritorio, que no hace caso del relleno de un enlace: el color va en la
+ * celda (bgcolor) y el relleno, en la celda y en el enlace.
+ */
+function boton(href: string, texto: string, fondo: string, color: string, grande: boolean): string {
+  const relleno = grande ? '12px 22px' : '9px 16px', radio = grande ? 10 : 9;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="display:inline-table;"><tr>`
+    + `<td bgcolor="${fondo}" style="background:${fondo};border-radius:${radio}px;mso-padding-alt:${relleno};">`
+    + `<a href="${href}" style="display:inline-block;color:${color};font-weight:800;font-size:${grande ? 15 : 14}px;padding:${relleno};border-radius:${radio}px;text-decoration:none;${TIPO}">${texto}</a>`
+    + `</td></tr></table>`;
+}
+
 export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): Correo {
   const c = cx.colores;
   // Lo nuevo, primero; y solo se marca como nuevo si antes ya recibió algún informe (la primera vez, todo lo es).
@@ -167,7 +179,7 @@ export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): 
           <div style="font-size:16px;font-weight:800;color:${c.oscuro.valor};line-height:1.3;">${esc(e.titulo)}${e.tipo === 'pagina' ? ' <span style="font-weight:700;font-size:12px;color:#6a6f7d;">(página)</span>' : ''}${marcar && e.nuevo ? etiquetaNuevo : ''}</div>
           <div style="font-size:13px;color:#6a6f7d;margin-top:3px;">${esc(corta(e))} · ${numero.format(e.visitas)} ${e.visitas === 1 ? 'visita' : 'visitas'}</div>
           <div style="font-size:14px;line-height:1.5;color:#474c59;margin-top:9px;">${motivo(e)}</div>
-          <div style="margin-top:12px;"><a href="${ficha(e)}" style="display:inline-block;background:${claro(c.principal.valor, 0.12)};color:${c.principal.valor};font-weight:800;font-size:14px;padding:9px 16px;border-radius:9px;text-decoration:none;">Arreglarlo</a></div>
+          <div style="margin-top:12px;">${boton(ficha(e), 'Arreglarlo', claro(c.principal.valor, 0.12), c.principal.valor, false)}</div>
         </td></tr>
       </table>
     </td></tr>`;
@@ -192,6 +204,7 @@ export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): 
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${esc(intro)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f8;">
 <tr><td align="center" style="padding:24px 10px;">
+  <!--[if mso]><table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;">
     <tr><td style="padding:0;font-size:0;line-height:0;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
@@ -224,12 +237,13 @@ export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): 
       </table>
     </td></tr>
     <tr><td align="center" style="padding:22px 28px 26px;">
-      <a href="${cx.urlPublica}/panel?problemas=1" style="display:inline-block;background:${c.principal.valor};color:#ffffff;font-weight:800;font-size:15px;padding:12px 22px;border-radius:10px;text-decoration:none;${TIPO}">Ver mis enlaces con problemas</a>
+      ${boton(`${cx.urlPublica}/panel?problemas=1`, 'Ver mis enlaces con problemas', c.principal.valor, '#ffffff', true)}
     </td></tr>
     <tr><td style="padding:16px 28px 22px;border-top:1px solid #e1e4ec;font-size:12px;line-height:1.5;color:#6a6f7d;${TIPO}">
       Aviso automático de ${esc(cx.dominio)}${cx.pie ? ` · ${esc(cx.pie)}` : ''}. Llega el primer lunes de cada mes y solo si tienes algo nuevo que revisar.
     </td></tr>
   </table>
+  <!--[if mso]></td></tr></table><![endif]-->
 </td></tr></table>
 </body></html>`;
 

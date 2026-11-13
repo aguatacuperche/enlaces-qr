@@ -1,19 +1,27 @@
 # enlaces-qr
 
-Enlaces cortos y códigos QR para colegios. Los profesores crean enlaces del tipo `enlaces.colegio.example/excursion`,
-les sacan un QR con los colores del centro y ven cuántas visitas tienen.
+Enlaces cortos y códigos QR con el dominio y la marca de quien lo instala: un centro educativo, un ayuntamiento, una
+asociación o una empresa. Las personas de la entidad crean enlaces del tipo `enlaces.colegio.example/excursion`, les
+sacan un QR con sus colores, imprimen carteles y pegatinas, y ven cuántas visitas tienen.
+
+Los QR son de la entidad, no de un proveedor: no caducan, no tienen cuota y siguen funcionando aunque cambie el destino.
+Cada semana se comprueba que los destinos siguen abriendo, y quien escanea puede ver adónde lleva un enlace antes de
+abrirlo.
 
 ## Qué hace
 
 - **Redirige** `<dominio>/<nombre>` a su destino, sin distinguir mayúsculas y con redirección temporal (302), para que
   cambiar el destino valga al momento. Si el enlace no existe, está en pausa o ha caducado, enseña una página del
   centro que lo explica (404 o 410) y, si parece una errata, propone el enlace parecido.
-- **Entrada solo con Google**, con cuentas del dominio del centro, y sin contraseñas propias. Se puede dejar fuera
-  una parte de las cuentas con un patrón (por ejemplo, las de los alumnos si sus correos llevan cifras). Los profesores
-  se dan de alta solos la primera vez que entran.
+- **Entrada solo con Google** (Google Workspace), con cuentas del dominio del centro, y sin contraseñas propias. Se
+  puede dejar fuera una parte de las cuentas con un patrón (por ejemplo, las de los alumnos si sus correos llevan
+  cifras). Cada persona se da de alta sola la primera vez que entra; un administrador le puede quitar el acceso.
+- **Adónde lleva, antes de abrirlo**: `<dominio>/<nombre>+` enseña el destino y desde cuándo existe, sin ir. Contra los
+  QR falsos pegados encima de uno de verdad; los carteles lo explican debajo de la dirección.
 - **Panel**: crear enlaces (con un nombre automático de 4 letras, sin O, I ni L, o con uno propio), pausar, poner
   caducidad y etiquetas, buscar y filtrar, y ver las visitas por día y por semana. Los administradores ven todos los
-  enlaces y los usuarios, y pueden pasar los enlaces de un profesor a otro.
+  enlaces y los usuarios, pueden pasar los enlaces de una persona a otra y quitarle el acceso a quien se va.
+- **Sacar los datos**: los enlaces y sus visitas por día, en CSV (cada uno los suyos; los administradores, todos).
 - **Creador de QR** con los colores y el logo del centro, puntos y esquinas a elegir y un marco con texto. Se descarga
   en PNG (300 ppp), SVG y PDF a tamaño de pegatina, folio o cartel. Antes de la descarga, la app lee el QR para
   comprobar que funciona.
@@ -24,7 +32,7 @@ les sacan un QR con los colores del centro y ven cuántas visitas tienen.
 - **Aviso de enlaces que no abren**: una vez por semana se comprueba cada destino. Si ya no existe, da error o no
   responde, sale marcado en el panel; si pide iniciar sesión en Google o es un formulario cerrado, sale como aviso que
   el dueño puede dar por bueno. No se comprueban direcciones de la red interna.
-- **Informe mensual por correo**: el primer lunes de cada mes, a cada profesor con enlaces que no abren le llega la
+- **Informe mensual por correo**: el primer lunes de cada mes, a cada persona con enlaces que no abren le llega la
   lista de los suyos, con el motivo y el enlace a su ficha. Nunca dos veces el mismo mes; si el servidor estaba parado
   ese día, sale en cuanto vuelve. Por SMTP (por ejemplo, el de Google Workspace con una contraseña de aplicación).
 - **Ayuda**: una tarjeta de bienvenida la primera vez y una página con las dudas frecuentes.
@@ -85,7 +93,14 @@ la zona horaria van en `.env` (ver `.env.example`).
 ## API para otros programas
 
 Compatible con la API de [YOURLS](https://yourls.org/) para acortar (`action=shorturl`) y con su complemento «edit
-url» para cambiar el destino (`action=update`): vale cualquier cliente de YOURLS que llame por POST.
+url» para cambiar el destino (`action=update`). Vale un cliente de YOURLS que:
+
+- llame por **POST** (por GET no contesta: la llave acabaría en los registros);
+- mande la llave en `signature` (no admite la firma con `timestamp` ni usuario y contraseña);
+- pida `format=json` o `format=simple` (no `xml` ni `jsonp`; sin `format`, JSON).
+
+Acciones: `shorturl`, `update`, `expand` (solo con los enlaces del propio programa) y `version` (para probar la
+conexión). `url-stats`, `stats` y `db-stats` no están.
 
 1. Un administrador entra en **Programas**, crea el programa (su nombre, los dominios hacia los que podrá crear
    enlaces y un tope de peticiones por minuto) y copia la llave. Solo se enseña esa vez. Si se pierde, «Sacar una
@@ -111,8 +126,10 @@ curl -s https://enlaces.colegio.example/yourls-api.php \
 
 - Sin `keyword`, el nombre automático de 4 letras. Con `keyword`, las mismas reglas que en el panel (minúsculas,
   números y guiones); si ya existe o no vale: `error:keyword`.
-- Si ese destino ya tiene un enlace del mismo programa, devuelve ese, como YOURLS: `"status":"fail"`,
-  `"code":"error:url"` y el `shorturl` que ya había, con estado 200. Los enlaces de los profesores no cuentan.
+- Si ese destino ya tiene un enlace del mismo programa que funciona, devuelve ese, como YOURLS: `"status":"fail"`,
+  `"code":"error:url"` y el `shorturl` que ya había, con estado 200. Los enlaces de las personas no cuentan, ni los
+  del programa que estén en pausa o caducados (entonces se crea otro).
+- Destinos de hasta 2.048 caracteres, y como mucho 10.000 enlaces por programa (`error:max`).
 - Hacia un dominio que no es del programa: `error:domain` (un subdominio tampoco vale si no está en la lista). Si
   falta la dirección o no vale: `error:nourl`.
 
@@ -124,8 +141,10 @@ curl -s https://enlaces.colegio.example/yourls-api.php \
   --data-urlencode url='https://aula.colegio.example/menu.php?t=def'
 ```
 
-Contesta `"message":"success: updated"` (200), o `"error: not found"` (404) si no existe o no es de ese programa.
-`shorturl` puede ser el nombre o el enlace corto entero.
+Contesta `"message":"success: updated"` (200) y `"active"`: `false` si el enlace está en pausa o caducado (el cambio
+se guarda, pero no abre hasta que alguien lo active). Si no existe, `"error: not found"` (404); si existe pero ya no es
+del programa (un administrador se lo pasó a una persona), `"code":"error:notyours"` (403): el programa no debe darlo por
+cambiado. `shorturl` puede ser el nombre o el enlace corto entero.
 
 Además:
 
@@ -133,9 +152,9 @@ Además:
   QR de un enlace»). Un YOURLS normal no las trae: así el programa sabe si el acortador dibuja el QR o lo dibuja él.
 - `format=simple` devuelve solo el enlace corto (o el mensaje de error), en texto.
 - Los errores llevan `"status":"fail"`, un `code` y su estado HTTP: 403 si falta la llave o no vale (`error:auth`),
-  405 por GET, 415 con `multipart/form-data`, 429 si se pasa del tope por minuto (`error:limit`).
+  405 por GET, 415 con `multipart/form-data`, 429 si se pasa del tope por minuto (`error:limit`, con `Retry-After`).
 - Los enlaces de un programa salen en **Todos**, con el programa como dueño, y desde Programas se ven solo los suyos.
-  Se pueden pausar, editar o pasar a un profesor; pasado a un profesor, el programa ya no lo puede cambiar. No entran
+  Se pueden pausar, editar o pasar a una persona; pasado a una persona, el programa ya no lo puede cambiar. No entran
   en el informe mensual por correo.
 - Se comprueban cada semana, como los demás (con HEAD o GET y sin sesión): el destino tiene que aguantarlo sin
   cambiar nada. Si el programa renueva sus direcciones, mejor `update` que dejar la vieja sin servir, o saldrá como
@@ -167,6 +186,8 @@ curl -s 'https://enlaces.colegio.example/svg/MKQT?fondo=transparente&color=princ
   (`<img src="<URL_PUBLICA>/svg/<nombre>">`): estas dos rutas llevan `Cross-Origin-Resource-Policy: cross-origin`.
 - El PNG sale siempre a 600 px de ancho; para pantallas grandes, mejor el SVG, que se ve nítido a cualquier tamaño.
 - `fondo=transparente` solo vale sobre un fondo claro: sobre uno oscuro, los móviles no leen el código.
+- Con direcciones muy largas (versión 7 del QR en adelante, unas 55 letras o más) sale sin logo: taparía una pieza que
+  el móvil necesita para leerlo.
 
 ## Desarrollo en local
 
@@ -203,6 +224,54 @@ Una imagen Docker (`Dockerfile`) y un `docker-compose.yml` pensado para ir detr�
    comentadas, el proxy no publica la app: sirve para dejarla lista y comprobarla antes de abrirla.
 4. `docker compose up -d --build`. La comprobación semanal de destinos necesita que el contenedor pueda salir a
    internet (como para la entrada con Google).
+
+### El primer administrador
+
+En `.env`, `ADMINISTRADORES=correo@colegio.example` (o varios, separados por comas): esas cuentas entran ya como
+administradoras. Después se pueden nombrar más desde **Usuarios**. Quien esté en esa lista vuelve a ser administrador
+cada vez que entra; para quitárselo, sácalo de la lista.
+
+### Copias y cómo volver atrás
+
+Todo lo que importa está en la base de datos; el contenedor no guarda nada. Hay que copiar la base, la carpeta de marca
+y el `.env` (este, en un sitio seguro: lleva los secretos).
+
+```sh
+pg_dump -Fc -d enlaces > enlaces-$(date +%F).dump              # copia
+pg_restore --clean --if-exists -d enlaces enlaces-AAAA-MM-DD.dump   # volver a una copia
+```
+
+### Actualizar a una versión nueva
+
+1. Una copia de la base (arriba): los cambios del esquema (`sql/`) se aplican solos al arrancar y no tienen vuelta
+   atrás sin ella.
+2. `git pull` y `docker compose up -d --build`.
+3. Comprobar que arranca (`docker compose logs`, `/salud`) y que un enlace de siempre sigue llevando a su sitio.
+
+Una sola copia de la app a la vez: varias se coordinan para migrar, comprobar y enviar el informe, pero cada una tarda
+hasta un minuto en enterarse de lo que cambia la otra.
+
+### Cambiar de dominio o de marca
+
+- **Dominio**: los QR y carteles impresos llevan el dominio dentro. El viejo tiene que seguir redirigiendo al nuevo
+  (un 301 en el proxy, con la misma ruta) mientras quede algo impreso. Cambia también `URL_PUBLICA` y la URI de
+  redirección del cliente OAuth de Google.
+- **Marca**: se cambian los ficheros de la carpeta de marca y se reinicia el contenedor (los navegadores pueden tardar
+  una hora en ver el logo nuevo). El isotipo, cuadrado, con `viewBox` y con los textos convertidos en trazos: la imagen
+  no trae tipografías. Los colores que se leen mal sobre blanco se oscurecen solos (lo avisa al arrancar).
+
+### Sacar todos los datos
+
+Desde el panel, un administrador descarga todos los enlaces y sus visitas por día en CSV (al pie de **Todos**). Desde
+la base, por ejemplo: `\copy (select * from enlaces) to 'enlaces.csv' csv header`.
+
+### Qué vigilar
+
+- `/salud` (lo usa el HEALTHCHECK del contenedor) y los registros: avisos de la marca, del correo y de la
+  comprobación de destinos.
+- El certificado del dominio (lo renueva el proxy).
+- La contraseña de aplicación del SMTP: si la cuenta que envía cambia de contraseña o se borra, el informe deja de
+  salir (en **Usuarios** se puede enviar una prueba).
 
 ### Migración desde la app anterior
 

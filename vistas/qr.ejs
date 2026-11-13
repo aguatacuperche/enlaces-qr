@@ -6,7 +6,7 @@
 <%- include('parciales/cabeza', { titulo: 'Código QR' }) %>
 <%- include('parciales/barra', { seccion: usuario.id === e.usuario_id ? 'mios' : 'todos' }) %>
 <main class="cuerpo">
-  <div class="miga"><a href="/panel/enlaces/<%= e.id %>"><svg class="i"><use href="#i-volver"/></svg><%= e.titulo %></a><span>/</span><b>Código QR de <%= corta(e.nombre) %></b></div>
+  <div class="miga"><a href="/panel/enlaces/<%= e.id %>"><svg class="i"><use href="#i-volver"/></svg><%= e.titulo %></a><span aria-hidden="true">/</span><h1>Código QR de <%= corta(e.nombre) %></h1></div>
   <form class="creador" id="creador" method="get" action="<%= base %>" data-base="<%= base %>">
     <div class="opciones">
       <fieldset class="grupo"><legend>Color</legend>
@@ -16,7 +16,7 @@
             <%- radio('color', p, `<i class="muestra" style="background:var(--${p})"></i>${escaparHtml(colores[p].nombre)}`) %>
           <% } %>
         </div>
-        <p class="nota">El <%= colores.acento.nombre.toLowerCase() %> solo va en el logo: sobre blanco, un QR de ese color cuesta de leer.</p>
+        <p class="nota">El <%= colores.acento.nombre.toLowerCase() %> solo va en el logo: sobre blanco, un QR de ese color se lee mal.</p>
       </fieldset>
       <fieldset class="grupo"><legend>Puntos</legend>
         <div class="segmento">
@@ -58,9 +58,9 @@
 
     <div class="vista">
       <div class="vista-cab">
-        <div class="pestanas-qr" role="tablist" aria-label="Qué descargar">
+        <div class="pestanas-qr" role="group" aria-label="Qué descargar">
           <% for (const [m, t] of [['codigo', 'Código QR'], ['cartel', 'Cartel'], ['pegatinas', 'Pegatinas']]) { %>
-            <button type="button" role="tab" data-modo="<%= m %>" aria-selected="<%= modo === m %>"><%= t %></button>
+            <button type="button" data-modo="<%= m %>" aria-pressed="<%= modo === m %>"><%= t %></button>
           <% } %>
         </div>
         <span class="lectura" id="lectura" aria-live="polite"><svg class="i"><use href="#i-ok"/></svg>Comprobando…</span>
@@ -97,11 +97,12 @@
           <label class="campo"><input name="cartel_titulo" value="<%= e.titulo %>" maxlength="140" aria-label="Título del cartel" placeholder="Título del cartel"></label>
           <label class="campo"><input name="cartel_texto" maxlength="300" aria-label="Explicación" placeholder="Explicación (opcional): «Escanea para rellenar la autorización»"></label>
         </div>
+        <p class="aviso mal" data-error-pdf="cartel" role="alert" hidden></p>
         <iframe class="vista-pdf" data-pdf="cartel" title="Vista previa del cartel"></iframe>
         <div class="descargas">
-          <a class="btn" data-formato="cartel.pdf" href="#"><svg class="i"><use href="#i-imprimir"/></svg>Descargar el cartel (PDF)</a>
+          <a class="btn" data-formato="cartel.pdf" href="<%= `/panel/enlaces/${e.id}/cartel.pdf?${consulta(o)}&descargar=1` %>"><svg class="i"><use href="#i-imprimir"/></svg>Descargar el cartel (PDF)</a>
         </div>
-        <p class="nota">Lleva arriba el logo del centro, el QR con el estilo de la izquierda y, debajo, la dirección escrita para quien no pueda escanear.</p>
+        <p class="nota">Lleva arriba el logo del centro, el QR con el estilo que hayas elegido y, debajo, la dirección escrita para quien no pueda escanear.</p>
       </div>
 
       <div data-panel="pegatinas" <%= modo === 'pegatinas' ? '' : 'hidden' %>>
@@ -127,9 +128,10 @@
           </div>
           <label class="casilla"><input type="checkbox" name="bordes" value="si">Marcar los bordes (para probar primero en un folio)</label>
         </div>
+        <p class="aviso mal" data-error-pdf="pegatinas" role="alert" hidden></p>
         <iframe class="vista-pdf" data-pdf="pegatinas" title="Vista previa de la hoja de pegatinas"></iframe>
         <div class="descargas">
-          <a class="btn" data-formato="pegatinas.pdf" href="#"><svg class="i"><use href="#i-imprimir"/></svg>Descargar las pegatinas (PDF)</a>
+          <a class="btn" data-formato="pegatinas.pdf" href="<%= `/panel/enlaces/${e.id}/pegatinas.pdf?${consulta(o)}&descargar=1` %>"><svg class="i"><use href="#i-imprimir"/></svg>Descargar las pegatinas (PDF)</a>
         </div>
         <p class="nota"><b>Imprime al 100 %</b>, sin «ajustar a la página», o no cuadrarán con las etiquetas. En las pegatinas el código va sin marco: el texto va al lado.</p>
       </div>

@@ -246,9 +246,9 @@ describe('API compatible con YOURLS', () => {
 describe('los enlaces de un programa en el panel', () => {
   it('salen en Todos a su nombre, y no como «sin dueño» ni en el informe', async () => {
     const todos = await pedir('/panel/todos', { galleta: admin });
-    expect(todos.texto).toContain('<td>Comedor</td>');
+    expect(todos.texto).toContain('>Comedor</td>');
     const sinDueno = await pedir('/panel/todos?dueno=sin', { galleta: admin });
-    expect(sinDueno.texto).not.toContain('<td>Comedor</td>');
+    expect(sinDueno.texto).not.toContain('>Comedor</td>');
     const suyos = await pedir(`/panel/todos?programa=${comedor.id}`, { galleta: admin });
     expect(suyos.texto).toContain('Enlaces de Comedor');
     expect(suyos.texto).toContain('menu-semana');

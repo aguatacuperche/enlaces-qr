@@ -103,6 +103,19 @@ describe('redirección', () => {
     expect((await pedir('/%2BDATOS')).destino).toBe('https://drive.example.com/tarifas');
   });
 
+  it('con un + al final enseña adónde lleva, sin ir ni contar la visita', async () => {
+    const antes = await visitas(ids.museo);
+    const r = await pedir('/excursion-museo+');
+    expect(r.estado).toBe(200);
+    expect(r.texto).toContain('Adónde lleva este enlace');
+    expect(r.texto).toContain('forms.example.com');
+    expect(await visitas(ids.museo)).toBe(antes);
+    // Un nombre heredado que empieza por + sigue siendo el suyo; uno en pausa enseña la pausa.
+    expect((await pedir('/+DATOS')).destino).toBe('https://drive.example.com/tarifas');
+    expect((await pedir('/kxrt+')).texto).toContain('está en pausa');
+    expect((await pedir('/no-existe-nada+')).estado).toBe(404);
+  });
+
   it('no sugiere nombres automáticos ni para lo que piden los robots', async () => {
     await bd.query("insert into enlaces (nombre, destino, titulo, usuario_id) values ('MKQT', 'https://docs.example.com/privado', 'Privado', $1)", [ids.ana]);
     await recargar(bd);
@@ -424,6 +437,30 @@ describe('páginas con varios enlaces', () => {
     // Otro profesor no puede dar por bueno lo de una página que no es suya.
     const marta = await entrarComo('marta.diaz@colegio.example');
     expect((await pedir(`/panel/enlaces/${id}/elementos/${x.id}/ignorar`, { galleta: marta, cuerpo: {} })).estado).toBe(404);
+  });
+});
+
+describe('sacar los datos', () => {
+  it('cada uno descarga sus enlaces en CSV; todos, solo un administrador; y nada se toma por fórmula', async () => {
+    const g = await entrarComo('ana.perez@colegio.example');
+    await bd.query("update enlaces set titulo = '=HIPERVINCULO(\"x\")' where id = $1", [ids.museo]);
+    const mios = await pedir('/panel/exportar.csv', { galleta: g });
+    expect(mios.tipo).toContain('text/csv');
+    expect(mios.texto).toContain('excursion-museo');
+    const filas = (t: string) => t.split('\r\n').slice(1).filter(Boolean);
+    expect(filas(mios.texto).every(f => f.includes('ana.perez@colegio.example'))).toBe(true);
+    expect(mios.texto).toContain(";\"'=HIPERVINCULO(\"\"x\"\")\";");
+    // Sin ser administrador, ?todos=1 da lo suyo y nada más.
+    expect(filas((await pedir('/panel/exportar.csv?todos=1', { galleta: g })).texto).every(f => f.includes('ana.perez@colegio.example'))).toBe(true);
+    await bd.query("insert into enlaces (nombre, destino, titulo, usuario_id) values ('de-luis-csv', 'https://colegio.example/l', 'De Luis', $1)", [ids.luis]);
+    const admin = await entrarComo('luis.gomez@colegio.example');
+    expect((await pedir('/panel/exportar.csv?todos=1', { galleta: admin })).texto).toContain('de-luis-csv');
+    expect((await pedir('/panel/exportar.csv', { galleta: g })).texto).not.toContain('de-luis-csv');
+    // fetch quita la marca BOM al leer el texto: se mira en la función.
+    expect((await pedir('/panel/visitas.csv', { galleta: g })).texto.split('\r\n')[0]).toBe('nombre;día;visitas');
+    const { aCsv } = await import('../src/enlaces.ts');
+    expect(aCsv([['=1+1', 'a;b']])).toBe('\ufeff\'=1+1;"a;b"\r\n');
+    await bd.query("update enlaces set titulo = 'excursion-museo' where id = $1", [ids.museo]);
   });
 });
 

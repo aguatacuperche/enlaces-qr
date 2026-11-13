@@ -111,7 +111,7 @@ export async function cartel(svgQr: string, direccion: string, pie: string, o: O
   }
 
   // Dirección y pie abajo; el QR, lo más grande que quepa en medio.
-  const altoAbajo = 98 * k;
+  const altoAbajo = 116 * k;
   const libre = H - y - altoAbajo - 24 * k;
   const prop = proporcion(svgQr);
   const anchoQr = Math.max(120 * k, Math.min(340 * k, ancho, libre / prop));
@@ -124,6 +124,9 @@ export async function cartel(svgQr: string, direccion: string, pie: string, o: O
   yAbajo = doc.y + 4 * k;
   doc.font(fuente(900)).fillColor(c.principal.valor);
   doc.fontSize(tamanoQueCabe(doc, direccion, ancho, 1, 28 * k, 12 * k)).text(direccion, m, yAbajo, { width: ancho, align: 'center' });
+  // Contra los QR falsos pegados encima: cómo ver adónde lleva antes de abrirlo (la página <dirección>+).
+  doc.font(fuente(700)).fontSize(10 * k).fillColor(TENUE)
+    .text(`Para ver adónde lleva antes de abrirlo: ${direccion}+`, m, doc.y + 4 * k, { width: ancho, align: 'center' });
   if (pie) {
     doc.font(fuente(700)).fontSize(10 * k).fillColor(TENUE);
     escribir(doc, 700, pie, m, H - 30 * k, { width: ancho, align: 'center', lineBreak: false });

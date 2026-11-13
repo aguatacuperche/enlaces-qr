@@ -22,10 +22,29 @@
     return p.toString();
   };
 
-  const vistaPdf = (modo, q) => {
+  // Los móviles (Chrome en Android, sobre todo) no enseñan un PDF dentro de la página: en su lugar, un botón para
+  // abrirlo. Y si el PDF no se puede hacer (medidas que no caben), el motivo sale fuera del recuadro, a la vista.
+  const sinVisor = navigator.pdfViewerEnabled === false;
+  let ultimoPdf = null;
+  const vistaPdf = async (modo, q) => {
     const marco = document.querySelector(`iframe[data-pdf="${modo}"]`);
+    const error = document.querySelector(`[data-error-pdf="${modo}"]`);
+    if (!marco) return;
+    const url = `${raiz}/${modo}.pdf?${q}`;
+    if (sinVisor) { marco.hidden = true; if (error) error.hidden = true; return; }
+    const r = await fetch(url).catch(() => null);
+    if (!r) return;
+    if (!r.ok) {
+      if (error) { error.textContent = (await r.text()).replace(/<[^>]+>/g, '').trim() || 'No se ha podido preparar el PDF.'; error.hidden = false; }
+      marco.hidden = true;
+      return;
+    }
+    if (error) error.hidden = true;
+    marco.hidden = false;
+    if (ultimoPdf) URL.revokeObjectURL(ultimoPdf);
+    ultimoPdf = URL.createObjectURL(await r.blob());
     // Sin la columna de miniaturas y con la página a lo ancho, en el visor del navegador.
-    if (marco) marco.src = `${raiz}/${modo}.pdf?${q}#navpanes=0&view=FitH`;
+    marco.src = `${ultimoPdf}#navpanes=0&view=FitH`;
   };
 
   const actualizar = async () => {
@@ -64,12 +83,12 @@
   for (const b of document.querySelectorAll('[data-modo]')) {
     b.addEventListener('click', () => {
       campoModo.value = b.dataset.modo;
-      for (const x of document.querySelectorAll('[data-modo]')) x.setAttribute('aria-selected', x === b);
+      for (const x of document.querySelectorAll('[data-modo]')) x.setAttribute('aria-pressed', x === b);
       for (const p of document.querySelectorAll('[data-panel]')) p.hidden = p.dataset.panel !== b.dataset.modo;
       actualizar();
     });
   }
-  hoja?.addEventListener('change', () => { if (medida) medida.hidden = hoja.value !== 'medida'; });
+  if (hoja) hoja.addEventListener('change', () => { if (medida) medida.hidden = hoja.value !== 'medida'; });
 
   document.getElementById('copiar-imagen').addEventListener('click', async () => {
     try {
@@ -77,7 +96,7 @@
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
       avisar('Imagen copiada: pégala en un documento');
     } catch {
-      avisar('Este navegador no deja copiar imágenes; usa Descargar PNG');
+      avisar('Este navegador no deja copiar imágenes: usa el botón PNG');
     }
   });
 

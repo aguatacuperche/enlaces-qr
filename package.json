@@ -1,7 +1,7 @@
 {
   "name": "enlaces-qr",
   "version": "1.0.0",
-  "description": "Enlaces cortos y códigos QR para colegios",
+  "description": "Enlaces cortos y códigos QR con el dominio y la marca de una entidad: un centro, un ayuntamiento, una empresa",
   "license": "MIT",
   "author": "Enrique Robredo",
   "private": true,

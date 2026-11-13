@@ -13,6 +13,7 @@
 <%- include('parciales/cabeza', { titulo: vista === 'mios' ? 'Mis enlaces' : 'Todos los enlaces' }) %>
 <%- include('parciales/barra', { seccion: vista }) %>
 <main class="cuerpo">
+  <% if (vista === 'mios') { %><h1 class="oculto">Mis enlaces</h1><% } %>
   <% if (mostrarAyuda) { %><%- include('parciales/bienvenida') %><% } %>
   <% if (cuentas.problemas && !actual.problemas) { %>
     <a class="aviso-problemas" href="<%= con({ problemas: '1', estado: '' }) %>">
@@ -25,9 +26,9 @@
   <form class="nuevo" method="post" action="/panel/enlaces" id="nuevo">
     <div class="nuevo-fila">
       <label for="destino">Nuevo enlace</label>
-      <div class="campo destino-campo <%= error && error.campo === 'destino' ? 'mal' : '' %>"><svg class="i"><use href="#i-enlace"/></svg><input id="destino" name="destino" type="url" required placeholder="Pega aquí la dirección larga" value="<%= nuevo.destino || '' %>"></div>
+      <div class="campo destino-campo <%= error && error.campo === 'destino' ? 'mal' : '' %>"><svg class="i"><use href="#i-enlace"/></svg><input id="destino" name="destino" type="url" required placeholder="Pega aquí la dirección larga" value="<%= nuevo.destino || '' %>" <%= error && error.campo === 'destino' ? 'aria-invalid=true aria-describedby=nombre-ayuda' : '' %>></div>
       <svg class="i" style="color:var(--tenue)" aria-hidden="true"><use href="#i-flecha"/></svg>
-      <label class="nombre-campo <%= error && error.campo === 'nombre' ? 'mal' : '' %>" title="Nombre del enlace: puedes cambiarlo"><span><%= dominio %>/</span><input name="nombre" id="nombre" required value="<%= nuevo.nombre || '' %>" aria-label="Nombre del enlace" autocomplete="off" spellcheck="false"></label>
+      <label class="nombre-campo <%= error && error.campo === 'nombre' ? 'mal' : '' %>" title="Nombre del enlace: puedes cambiarlo"><span><%= dominio %>/</span><input name="nombre" id="nombre" required value="<%= nuevo.nombre || '' %>" aria-label="Nombre del enlace" aria-describedby="nombre-ayuda" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" <%= error && error.campo === 'nombre' ? 'aria-invalid=true' : '' %>></label>
       <div class="campo titulo-campo"><input name="titulo" placeholder="Título (opcional)" value="<%= nuevo.titulo || '' %>" aria-label="Título" maxlength="120"></div>
       <button class="btn">Crear</button>
       <button class="btn fantasma" formaction="/panel/paginas" formnovalidate title="Una página con varios enlaces y un solo QR">Nueva página</button>
@@ -64,6 +65,7 @@
         <option value="visitas" <%= actual.orden === 'visitas' ? 'selected' : '' %>>Más visitados</option>
         <option value="titulo" <%= actual.orden === 'titulo' ? 'selected' : '' %>>Por título</option>
       </select>
+      <noscript><button class="btn suave peq">Aplicar</button></noscript>
     </div>
   </form>
 
@@ -90,27 +92,38 @@
             <% if (e.id === recienCreado) { %><span class="chip-gris nuevo">Recién creado</span><% } %>
             <% if (e.tipo === 'pagina') { %><span class="chip-gris"><svg class="i"><use href="#i-lista"/></svg>Página</span><% } %>
             <% if (e.problema && !e.aviso_ignorado) { %><span class="chip-problema <%= esAviso(e.problema) ? 'aviso' : 'roto' %>" title="<%= e.problema_detalle %>"><svg class="i"><use href="#i-aviso"/></svg><%= esAviso(e.problema) ? 'Revisar' : 'No abre' %></span><% } %>
-            <% if (e.elementos_mal) { %><span class="chip-problema roto" title="Abre su ficha para ver cuáles"><svg class="i"><use href="#i-aviso"/></svg><%= e.elementos_mal === 1 ? '1 enlace no abre' : `${e.elementos_mal} enlaces no abren` %></span><% } %>
+            <% if (e.elementos_mal) { %><span class="chip-problema roto" title="Abre su ficha para ver cuáles"><svg class="i"><use href="#i-aviso"/></svg><%= e.elementos_mal === 1 ? '1 enlace por revisar' : `${e.elementos_mal} enlaces por revisar` %></span><% } %>
           </div>
         </td>
         <td><span class="corto"><span><%= dominio %>/</span><b><%= e.nombre %></b><button type="button" class="ic" title="Copiar enlace" aria-label="Copiar <%= corta(e.nombre) %>" data-copiar="<%= urlCorta(e.nombre) %>"><svg class="i"><use href="#i-copiar"/></svg></button></span></td>
         <td class="col-destino"><% if (e.tipo === 'pagina') { %><span class="destino"><%= e.elementos === 1 ? 'Página con 1 enlace' : `Página con ${e.elementos} enlaces` %></span><% } else { %><a class="destino" href="<%= e.destino %>" title="<%= e.destino %>" target="_blank" rel="noopener noreferrer"><%= destinoCorto(e.destino) %></a><% } %></td>
-        <% if (vista === 'todos') { %><td><%= e.dueno || e.programa || 'Sin dueño' %></td><% } %>
+        <% if (vista === 'todos') { %><td class="col-dueno"><%= e.dueno || e.programa || 'Sin dueño' %></td><% } %>
         <td><div class="visitas" title="<%= numero(e.visitas_mes) %> visitas en los últimos 30 días"><%- minigrafico(series.get(e.id), estado !== 'activo') %><div><b><%= numero(e.visitas) %></b><small><%= numero(e.visitas_mes) %> en 30 días</small></div></div></td>
         <td>
           <form method="post" action="/panel/enlaces/<%= e.id %>/activo">
             <input type="hidden" name="volver" value="<%= volver %>">
-            <button class="estado <%= estado %>" title="<%= e.activo ? 'Pausar' : 'Activar' %>"><span class="interruptor <%= sw %>"></span><%= txt %></button>
+            <button class="estado <%= estado %>" title="<%= e.activo ? 'Pausar' : 'Activar' %>" aria-pressed="<%= e.activo ? 'true' : 'false' %>"><span class="interruptor <%= sw %>"></span><%= txt %><span class="oculto"> · <%= e.titulo %>: pulsa para <%= e.activo ? 'pausarlo' : 'activarlo' %></span></button>
           </form>
         </td>
         <td class="col-acciones"><div class="acciones">
-          <a class="ic" href="/panel/enlaces/<%= e.id %>/qr" title="Código QR" aria-label="Código QR"><svg class="i"><use href="#i-qr"/></svg></a>
-          <a class="ic" href="/panel/enlaces/<%= e.id %>" title="Editar y ver visitas" aria-label="Editar"><svg class="i"><use href="#i-editar"/></svg></a>
+          <a class="ic con-texto" href="/panel/enlaces/<%= e.id %>/qr" title="Código QR, cartel y pegatinas" aria-label="Código QR de <%= e.titulo %>"><svg class="i"><use href="#i-qr"/></svg><span aria-hidden="true">QR</span></a>
+          <a class="ic" href="/panel/enlaces/<%= e.id %>" title="Editar y ver visitas" aria-label="Editar <%= e.titulo %>"><svg class="i"><use href="#i-editar"/></svg></a>
         </div></td>
       </tr>
     <% } %>
     </tbody>
   </table>
+  <p class="exportar">
+    <a href="/panel/exportar.csv<%= vista === 'todos' ? '?todos=1' : '' %>"><svg class="i"><use href="#i-bajar"/></svg><%= vista === 'todos' ? 'Todos los enlaces' : 'Mis enlaces' %> en CSV</a>
+    <a href="/panel/visitas.csv<%= vista === 'todos' ? '?todos=1' : '' %>"><svg class="i"><use href="#i-bajar"/></svg>Sus visitas por día en CSV</a>
+  </p>
+  <% if (pagina > 1 || hayMas) { %>
+    <nav class="paginas" aria-label="Más enlaces">
+      <% if (pagina > 1) { %><a class="btn fantasma peq" href="<%= con({ pagina: pagina > 2 ? String(pagina - 1) : '' }) %>">Anteriores</a><% } %>
+      <span>Del <%= numero((pagina - 1) * porPagina + 1) %> al <%= numero((pagina - 1) * porPagina + enlaces.length) %></span>
+      <% if (hayMas) { %><a class="btn fantasma peq" href="<%= con({ pagina: String(pagina + 1) }) %>">Siguientes</a><% } %>
+    </nav>
+  <% } %>
   <% } %>
 </main>
 <%- include('parciales/pie') %>

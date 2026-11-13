@@ -65,6 +65,8 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
         'default-src': ["'self'"], 'img-src': ["'self'", 'data:', 'blob:'], 'script-src': ["'self'"],
         'style-src': ["'self'", "'unsafe-inline'"], 'font-src': ["'self'"], 'form-action': ["'self'"],
         'frame-ancestors': ["'self'"], 'upgrade-insecure-requests': config.produccion ? [] : null,
+        // La vista previa del cartel y de las pegatinas: el PDF se pide, y si sale bien se enseña desde la memoria.
+        'frame-src': ["'self'", 'blob:'],
       },
     },
     strictTransportSecurity: config.produccion,
@@ -139,7 +141,18 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
 
   // Lo principal: <dominio>/<nombre>.
   app.get('/:nombre', async (req, res) => {
-    const r = resolver(req.params.nombre as string);
+    const pedido = req.params.nombre as string;
+    const r = resolver(pedido);
+    // <dominio>/<nombre>+ (si no hay un enlace que se llame así): adónde lleva, sin ir. Para quien duda de un QR pegado
+    // en la calle; no cuenta como visita.
+    if (r.tipo === 'no-existe' && pedido.length > 1 && pedido.endsWith('+')) {
+      const sin = resolver(pedido.slice(0, -1));
+      if (sin.tipo === 'ir' || sin.tipo === 'pagina') {
+        const e = await enlacePorId(bd, sin.id);
+        return e ? res.set('Cache-Control', 'no-store').render('previa', { e }) : noEncontrado(res, r);
+      }
+      if (sin.tipo !== 'no-existe') return noEncontrado(res, sin);
+    }
     if (r.tipo !== 'ir' && r.tipo !== 'pagina') return noEncontrado(res, r);
     if (cuentaComoVisita(req.method, req.get('user-agent'))) {
       contarVisita(r.id);
