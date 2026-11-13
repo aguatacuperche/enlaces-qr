@@ -35,7 +35,9 @@
     const r = await fetch(url).catch(() => null);
     if (!r) return;
     if (!r.ok) {
-      if (error) { error.textContent = (await r.text()).replace(/<[^>]+>/g, '').trim() || 'No se ha podido preparar el PDF.'; error.hidden = false; }
+      // El motivo llega como un párrafo de HTML (el mismo que ve quien abre el enlace sin JavaScript): solo su texto.
+      const motivo = new DOMParser().parseFromString(await r.text(), 'text/html').body.textContent.trim();
+      if (error) { error.textContent = motivo || 'No se ha podido preparar el PDF.'; error.hidden = false; }
       marco.hidden = true;
       return;
     }
