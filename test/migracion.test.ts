@@ -49,3 +49,23 @@ describe('plan de migración', () => {
     expect(plan.enlaces[0].creado).toBe('2021-02-09T13:55:08Z');
   });
 });
+
+describe('casos de otras exportaciones', () => {
+  const reglas = reglasDelEntorno({ DOMINIO_CORREO: 'colegio.example', CORREOS_EXCLUIDOS: '\\d' });
+  const u = (id: string, email: string, admin = 'f'): FilaUsuario => ({ id, email, name: '', admin });
+  const e = (id: string, slug: string, user_id: string): FilaEnlace =>
+    ({ id, slug, destiny: 'https://colegio.example/x', name: slug, visits: '3', enable: 't', user_id, inserted_at: '2024-01-01 10:00:00', updated_at: '2024-01-01 10:00:00' });
+
+  it('dos cuentas con el mismo correo en distintas mayúsculas son una sola persona, con los enlaces de las dos', () => {
+    const p = planificar([u('1', 'Ana.Perez@colegio.example'), u('2', 'ana.perez@colegio.example', 't')], [e('10', 'uno', '1'), e('11', 'dos', '2')], reglas);
+    expect(p.usuarios).toHaveLength(1);
+    expect(p.usuarios[0].admin).toBe(true);
+    expect(p.enlaces.map(x => x.correoDueno)).toEqual(['ana.perez@colegio.example', 'ana.perez@colegio.example']);
+  });
+
+  it('un nombre con % no puede ser dirección: no se migra y se avisa', () => {
+    const p = planificar([u('1', 'ana@colegio.example')], [e('10', '50%dto', '1')], reglas);
+    expect(p.enlaces).toHaveLength(0);
+    expect(p.descartes.nombresImposibles.map(x => x.nombre)).toEqual(['50%dto']);
+  });
+});

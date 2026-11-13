@@ -85,7 +85,7 @@
         <td class="nom">
           <a href="/panel/enlaces/<%= e.id %>"><%= e.titulo %></a>
           <div class="chips">
-            <% if (e.etiqueta) { %><a class="etiqueta" style="--c:<%= colorEtiqueta(e.etiqueta) %>" href="<%= con({ etiqueta: e.etiqueta }) %>"><%= e.etiqueta %></a><% } %>
+            <% if (e.etiqueta) { %><a class="etiqueta <%= colorEtiqueta(e.etiqueta) %>" href="<%= con({ etiqueta: e.etiqueta }) %>"><%= e.etiqueta %></a><% } %>
             <% if (e.caduca) { %><span class="chip-gris"><svg class="i"><use href="#i-reloj"/></svg><%= estado === 'caducado' ? 'Caducó' : 'Caduca' %> <%= fechaCorta(e.caduca) %></span><% } %>
             <% if (e.id === recienCreado) { %><span class="chip-gris nuevo">Recién creado</span><% } %>
             <% if (e.tipo === 'pagina') { %><span class="chip-gris"><svg class="i"><use href="#i-lista"/></svg>Página</span><% } %>

@@ -48,11 +48,24 @@ describe('el correo', () => {
   const ana: Destinatario = { id: 1, correo: 'ana@colegio.example', nombre: 'Ana Pérez', enlaces: [
     enlace(10, 'Matrícula <3.º ESO>', 'no-existe', 'La página ya no existe (error 404).'),
     { id: 11, tipo: 'pagina', nombre: '3primaria', titulo: '3.º de Primaria', visitas: 5, problema: null, problema_detalle: null,
-      elementos: [{ titulo: 'Libros', problema_detalle: 'El dominio ya no existe.' }] },
+      elementos: [{ titulo: 'Libros', problema: 'no-responde', problema_detalle: 'El dominio ya no existe.' }] },
     enlace(12, 'Comedor profesores', 'formulario-cerrado', 'El formulario ya no acepta respuestas.'),
   ] };
 
-  it('dice cuántos son, saluda por el nombre y separa lo roto de lo que hay que revisar', () => {
+  it('una página con solo avisos va a «Para revisar», y más de 40 enlaces no caben: se dice cuántos faltan', () => {
+    const pagina = { id: 20, tipo: 'pagina' as const, nombre: 'p', titulo: 'Acta', visitas: 1, problema: null, problema_detalle: null,
+      elementos: [{ titulo: 'Acta del claustro', problema: 'pide-sesion', problema_detalle: 'Pide iniciar sesión.' }] };
+    const c = componerInforme({ id: 2, correo: 'b@colegio.example', nombre: 'Bea', enlaces: [pagina] }, cx);
+    expect(c.texto).toContain('PARA REVISAR (1)');
+    expect(c.texto).not.toContain('NO ABREN');
+    const muchos = Array.from({ length: 45 }, (_, i) => enlace(100 + i, `Enlace ${i}`, 'no-existe', 'No existe.'));
+    const m = componerInforme({ id: 3, correo: 'c@colegio.example', nombre: 'Carlos', enlaces: muchos }, cx);
+    expect(m.texto).toContain('NO ABREN (45)');
+    expect(m.texto).toContain('Y 5 más');
+    expect(m.html.match(/>Arreglarlo<\/a>/g)?.length).toBe(40);
+  });
+
+    it('dice cuántos son, saluda por el nombre y separa lo roto de lo que hay que revisar', () => {
     const c = componerInforme(ana, cx);
     expect(c.para).toBe('ana@colegio.example');
     expect(c.asunto).toBe('3 enlaces tuyos de enlaces.colegio.example necesitan revisión');

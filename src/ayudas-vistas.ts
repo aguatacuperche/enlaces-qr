@@ -8,11 +8,11 @@ import { esAviso } from './comprobacion.ts';
 const numero = new Intl.NumberFormat('es-ES');
 const PAPELES_ETIQUETA = ['principal', 'segundo', 'tercero', 'acento'] as const;
 
-/** Cada etiqueta, siempre del mismo color de la marca. */
+/** Cada etiqueta, siempre del mismo color de la marca: la clase con sus colores (los genera marca.css). */
 function colorEtiqueta(etiqueta: string): string {
   let h = 0;
   for (const ch of etiqueta.toLowerCase()) h = (h * 31 + ch.codePointAt(0)!) >>> 0;
-  return `var(--${PAPELES_ETIQUETA[h % PAPELES_ETIQUETA.length]})`;
+  return `e-${PAPELES_ETIQUETA[h % PAPELES_ETIQUETA.length]}`;
 }
 
 /** Línea de visitas de los últimos días (una serie, sin leyenda: el número va al lado). */

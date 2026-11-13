@@ -20,7 +20,7 @@ const HORA = 8;
 export type EnlaceDelInforme = {
   id: number; tipo: 'enlace' | 'pagina'; nombre: string; titulo: string; visitas: number;
   problema: string | null; problema_detalle: string | null;
-  elementos: { titulo: string; problema_detalle: string; nuevo?: boolean }[];
+  elementos: { titulo: string; problema: string; problema_detalle: string; nuevo?: boolean }[];
   /** Ha aparecido después del último informe que recibió su dueño. */
   nuevo?: boolean;
 };
@@ -75,18 +75,19 @@ export async function destinatarios(bd: Bd): Promise<Destinatario[]> {
   const { rows } = await bd.query<EnlaceDelInforme & { usuario_id: number; correo: string; dueno: string; ya_recibio: boolean }>(
     `select e.id, e.tipo, e.nombre, e.titulo, e.problema, e.problema_detalle, e.usuario_id, u.correo, u.nombre as dueno,
             e.visitas_anteriores + coalesce((select sum(total) from visitas v where v.enlace_id = e.id), 0)::int as visitas,
-            coalesce((select json_agg(json_build_object('titulo', x.titulo, 'problema_detalle', x.problema_detalle,
+            coalesce((select json_agg(json_build_object('titulo', x.titulo, 'problema', x.problema, 'problema_detalle', x.problema_detalle,
                         'nuevo', i.ultimo is null or greatest(x.problema_desde, e.dueno_desde) > i.ultimo) order by x.posicion)
-                      from elementos x where x.pagina_id = e.id and x.problema is not null), '[]') as elementos,
+                      from elementos x where x.pagina_id = e.id and x.problema is not null and not x.aviso_ignorado), '[]') as elementos,
             (e.problema is not null and not e.aviso_ignorado and (i.ultimo is null or greatest(e.problema_desde, e.dueno_desde) > i.ultimo))
-              or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null
+              or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null and not x.aviso_ignorado
                            and (i.ultimo is null or greatest(x.problema_desde, e.dueno_desde) > i.ultimo)) as nuevo,
             i.ultimo is not null as ya_recibio
      from enlaces e join usuarios u on u.id = e.usuario_id
      left join lateral (select max(enviado) as ultimo from informes where usuario_id = u.id) i on true
      where e.activo and (e.caduca is null or e.caduca >= $1::date)
+       and not u.bloqueado
        and ((e.problema is not null and not e.aviso_ignorado)
-            or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null))
+            or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null and not x.aviso_ignorado))
      order by u.id, e.titulo`, [hoy()]);
   const porUsuario = new Map<number, Destinatario>();
   for (const r of rows) {
@@ -116,8 +117,11 @@ function oscuro(hex: string, proporcion: number): string {
   return '#' + [1, 3, 5].map(i => Math.round(parseInt(hex.slice(i, i + 2), 16) * proporcion).toString(16).padStart(2, '0')).join('');
 }
 
-/** ¿Está roto? Una página cuenta como rota si alguno de sus enlaces no abre. */
-const roto = (e: EnlaceDelInforme) => (e.problema && !esAviso(e.problema)) || e.elementos.length > 0;
+/** ¿Está roto? Una página cuenta como rota si alguno de sus enlaces no abre (los avisos, como pedir sesión, no). */
+const roto = (e: EnlaceDelInforme) => (e.problema && !esAviso(e.problema)) || e.elementos.some(x => !esAviso(x.problema));
+
+/** Más enlaces que estos en un correo y Gmail lo corta («Mensaje recortado»): el resto se ve en el panel. */
+const MAX_EN_CORREO = 40;
 
 const TIPO = "font-family:'Nunito','Segoe UI',Helvetica,Arial,sans-serif;";
 
@@ -126,7 +130,9 @@ export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): 
   // Lo nuevo, primero; y solo se marca como nuevo si antes ya recibió algún informe (la primera vez, todo lo es).
   const marcar = !!d.yaRecibio;
   const orden = (a: EnlaceDelInforme, b: EnlaceDelInforme) => Number(!!b.nuevo) - Number(!!a.nuevo);
-  const rotos = d.enlaces.filter(roto).sort(orden), revisar = d.enlaces.filter(e => !roto(e)).sort(orden);
+  const todosRotos = d.enlaces.filter(roto).sort(orden), todosRevisar = d.enlaces.filter(e => !roto(e)).sort(orden);
+  const rotos = todosRotos.slice(0, MAX_EN_CORREO), revisar = todosRevisar.slice(0, Math.max(0, MAX_EN_CORREO - rotos.length));
+  const sinCaber = d.enlaces.length - rotos.length - revisar.length;
   const nuevos = d.enlaces.filter(e => e.nuevo).length;
   const n = d.enlaces.length;
   const nombrePila = d.nombre.split(/\s+/)[0] || d.nombre;
@@ -141,7 +147,11 @@ export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): 
   const motivo = (e: EnlaceDelInforme) => {
     if (e.tipo === 'pagina' && e.elementos.length) {
       const lista = e.elementos.map(x => `<li style="margin:2px 0;"><b>${esc(x.titulo)}</b>: ${esc(x.problema_detalle)}</li>`).join('');
-      return `<b style="color:${c.tercero.valor};">${e.elementos.length === 1 ? 'Uno de sus enlaces no abre' : `${e.elementos.length} de sus enlaces no abren`}:</b><ul style="margin:6px 0 0;padding-left:18px;">${lista}</ul>`;
+      const malos = e.elementos.filter(x => !esAviso(x.problema)).length;
+      const titulo = malos === 0 ? (e.elementos.length === 1 ? 'Revisa uno de sus enlaces' : `Revisa ${e.elementos.length} de sus enlaces`)
+        : malos === 1 ? 'Uno de sus enlaces no abre' : `${malos} de sus enlaces no abren`;
+      return `<b style="color:${malos ? c.tercero.valor : oscuro(c.acento.valor, 0.5)};">${titulo}:</b><ul style="margin:6px 0 0;padding-left:18px;">${lista}</ul>`
+        + (malos ? '' : `<span style="color:#6a6f7d;">Si es a propósito, dalos por buenos en la ficha de la página.</span>`);
     }
     const aviso = esAviso(e.problema);
     return `<b style="color:${aviso ? oscuro(c.acento.valor, 0.5) : c.tercero.valor};">${aviso ? 'Revisa' : 'No abre'}:</b> ${esc(e.problema_detalle ?? '')}`
@@ -163,11 +173,11 @@ export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): 
     </td></tr>`;
   };
 
-  const seccion = (titulo: string, color: string, lista: EnlaceDelInforme[]) => lista.length ? `
+  const seccion = (titulo: string, color: string, lista: EnlaceDelInforme[], total: number) => lista.length ? `
     <tr><td style="padding:18px 28px 4px;${TIPO}">
       <table role="presentation" cellpadding="0" cellspacing="0"><tr>
         <td style="width:10px;height:10px;background:${color};border-radius:5px;font-size:0;line-height:0;">&nbsp;</td>
-        <td style="padding-left:8px;font-size:13px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#474c59;">${titulo} (${lista.length})</td>
+        <td style="padding-left:8px;font-size:13px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#474c59;">${titulo} (${total})</td>
       </tr></table>
     </td></tr>${lista.map(tarjeta).join('')}` : '';
 
@@ -176,9 +186,10 @@ export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): 
             <td style="padding:6px 0;font-size:14px;line-height:1.45;color:#474c59;${TIPO}"><b style="color:${c.oscuro.valor};">${titulo}</b> ${texto}</td></tr>`;
 
   const html = `<!doctype html>
-<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(asunto)}</title></head>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"><title>${esc(asunto)}</title></head>
 <body style="margin:0;padding:0;background:#f3f4f8;">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(intro)}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all;">${esc(intro)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f8;">
 <tr><td align="center" style="padding:24px 10px;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;">
@@ -197,8 +208,9 @@ export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): 
       <h1 style="margin:0 0 10px;font-size:24px;line-height:1.25;font-weight:900;color:${c.oscuro.valor};${TIPO}">${titular}</h1>
       <p style="margin:0;font-size:15px;line-height:1.55;color:#474c59;">${esc(intro)}</p>
     </td></tr>
-    ${seccion('No abren', c.tercero.valor, rotos)}
-    ${seccion('Para revisar', c.acento.valor, revisar)}
+    ${seccion('No abren', c.tercero.valor, rotos, todosRotos.length)}
+    ${seccion('Para revisar', c.acento.valor, revisar, todosRevisar.length)}
+    ${sinCaber > 0 ? `<tr><td style="padding:10px 28px 0;font-size:14px;line-height:1.5;color:#474c59;${TIPO}">Y ${sinCaber === 1 ? 'uno más' : `${numero.format(sinCaber)} más`}: no caben en el correo. Los tienes todos en el panel.</td></tr>` : ''}
     <tr><td style="padding:22px 28px 6px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f8;border-radius:12px;">
         <tr><td style="padding:14px 16px 8px;${TIPO}">
@@ -231,8 +243,9 @@ export function componerInforme(d: Destinatario, cx: Contexto, prueba = false): 
   const texto = [
     `Hola, ${nombrePila}:`,
     `${titular}.\n\n${intro}`,
-    rotos.length ? `NO ABREN (${rotos.length})\n\n${lineas(rotos)}` : null,
-    revisar.length ? `PARA REVISAR (${revisar.length})\n\n${lineas(revisar)}` : null,
+    rotos.length ? `NO ABREN (${todosRotos.length})\n\n${lineas(rotos)}` : null,
+    revisar.length ? `PARA REVISAR (${todosRevisar.length})\n\n${lineas(revisar)}` : null,
+    sinCaber > 0 ? `Y ${sinCaber === 1 ? 'uno más' : `${sinCaber} más`}: no caben en el correo. Los tienes todos en el panel.` : null,
     'Cómo se arregla:\n'
       + '  1. Cambia el destino por uno que funcione: lo que ya esté impreso llevará al nuevo.\n'
       + '  2. ¿Ya no se usa? Quita «Activo» para pausarlo.\n'
@@ -276,13 +289,42 @@ export async function enviarUno(cartero: Cartero, d: Destinatario, cx: Contexto,
  * Si la ronda de ese mes ya está hecha, no envía nada.
  */
 export async function enviarInformes(bd: Bd, cartero: Cartero, mes: string, cx: Contexto): Promise<number> {
-  if ((await bd.query('select 1 from rondas_informe where mes = $1', [mes])).rowCount) return 0;
+  // Si hay dos copias de la app a la vez, solo una envía (las demás no hacen nada esta vuelta).
+  const conexion = await bd.connect();
+  try {
+    if (!(await conexion.query<{ ok: boolean }>('select pg_try_advisory_lock($1) as ok', [BLOQUEO_INFORME])).rows[0].ok) return 0;
+    try {
+      return await rondaDelMes(bd, cartero, mes, cx);
+    } finally {
+      await conexion.query('select pg_advisory_unlock($1)', [BLOQUEO_INFORME]);
+    }
+  } finally {
+    conexion.release();
+  }
+}
+
+/** Un número cualquiera, el mismo para todas las copias de la app: el del bloqueo del informe. */
+const BLOQUEO_INFORME = 0x696e666f;
+
+async function rondaDelMes(bd: Bd, cartero: Cartero, mes: string, cx: Contexto): Promise<number> {
+  const { rows: [ronda] } = await bd.query<{ destinatarios: number[] | null; completa: boolean }>(
+    'select destinatarios, completa from rondas_informe where mes = $1', [mes]);
+  if (ronda?.completa) return 0;
   const { rows } = await bd.query<{ usuario_id: number }>('select usuario_id from informes where mes = $1', [mes]);
   const yaEnviados = new Set(rows.map(r => r.usuario_id));
-  let n = 0, fallos = 0;
-  for (const d of await destinatarios(bd)) {
+  const todos = await destinatarios(bd);
+  let lista: Destinatario[];
+  if (!ronda) {
     // Ya lo recibió este mes, o no hay nada nuevo desde el último: no se insiste.
-    if (yaEnviados.has(d.id) || !d.enlaces.some(e => e.nuevo)) continue;
+    lista = todos.filter(d => !yaEnviados.has(d.id) && d.enlaces.some(e => e.nuevo));
+    // La lista se fija ahora: si algún envío falla, se reintenta solo a estos.
+    await bd.query('insert into rondas_informe (mes, destinatarios, completa) values ($1, $2, false) on conflict do nothing', [mes, lista.map(d => d.id)]);
+  } else {
+    const fijos = new Set(ronda.destinatarios ?? []);
+    lista = todos.filter(d => fijos.has(d.id) && !yaEnviados.has(d.id));
+  }
+  let n = 0, fallos = 0;
+  for (const d of lista) {
     try {
       await enviarUno(cartero, d, cx);
       await bd.query('insert into informes (usuario_id, mes, enlaces) values ($1, $2, $3) on conflict do nothing', [d.id, mes, d.enlaces.length]);
@@ -293,7 +335,7 @@ export async function enviarInformes(bd: Bd, cartero: Cartero, mes: string, cx: 
       console.error(`Informe mensual a ${d.correo}:`, (e as Error).message);
     }
   }
-  if (!fallos) await bd.query('insert into rondas_informe (mes) values ($1) on conflict do nothing', [mes]);
+  if (!fallos) await bd.query('update rondas_informe set completa = true, hecha = now() where mes = $1', [mes]);
   return n;
 }
 

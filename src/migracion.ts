@@ -6,8 +6,9 @@
  * - Usuarios: solo los que hoy podrían entrar (ver acceso.ts). Las cuentas excluidas no se migran, y sus enlaces
  *   tampoco.
  * - Enlaces con el mismo nombre sin distinguir mayúsculas: se queda el más reciente (id mayor) y se suman las visitas.
- * - Enlaces cuyo nombre no puede funcionar como dirección (lleva / ? # o espacios) o con un destino que no es una
+ * - Enlaces cuyo nombre no puede funcionar como dirección (lleva / ? # % o espacios) o con un destino que no es una
  *   dirección web: no se migran y se avisa.
+ * - Dos cuentas con el mismo correo escrito con otras mayúsculas son la misma persona: una sola, con los enlaces de las dos.
  */
 import { puedeEntrar, normalizarCorreo, type Reglas } from './acceso.ts';
 import { clave, RESERVADOS } from './nombres.ts';
@@ -53,8 +54,15 @@ export function planificar(filasUsuarios: FilaUsuario[], filasEnlaces: FilaEnlac
 
   const correoDe = new Map<string, string>();
   const fuera = new Set<string>();
+  const vistos = new Map<string, UsuarioMigrado>();
   for (const f of filasUsuarios) {
     const correo = normalizarCorreo(f.email);
+    const ya = vistos.get(correo);
+    if (ya) {
+      correoDe.set(f.id, correo);
+      ya.admin ||= esVerdad(f.admin);
+      continue;
+    }
     const v = puedeEntrar(correo, reglas);
     if (!v.ok) {
       fuera.add(f.id);
@@ -62,7 +70,9 @@ export function planificar(filasUsuarios: FilaUsuario[], filasEnlaces: FilaEnlac
       continue;
     }
     correoDe.set(f.id, correo);
-    plan.usuarios.push({ idAntiguo: Number(f.id), correo, nombre: f.name.trim() || correo, admin: esVerdad(f.admin) });
+    const u = { idAntiguo: Number(f.id), correo, nombre: f.name.trim() || correo, admin: esVerdad(f.admin) };
+    vistos.set(correo, u);
+    plan.usuarios.push(u);
   }
 
   const grupos = new Map<string, FilaEnlace[]>();
@@ -72,7 +82,8 @@ export function planificar(filasUsuarios: FilaUsuario[], filasEnlaces: FilaEnlac
       plan.descartes.enlacesDeExcluidos.push({ id: Number(f.id), nombre, visitas: Number(f.visits) || 0 });
       continue;
     }
-    if (!nombre || /[/?#\s\\]/.test(nombre)) { plan.descartes.nombresImposibles.push({ id: Number(f.id), nombre }); continue; }
+    // «%» tampoco: el navegador lo toma como el principio de un carácter escrito en código (%20…) y la dirección falla.
+    if (!nombre || /[/?#%\s\\]/.test(nombre)) { plan.descartes.nombresImposibles.push({ id: Number(f.id), nombre }); continue; }
     if (!destinoValido(f.destiny.trim())) { plan.descartes.destinosNoValidos.push({ id: Number(f.id), nombre, destino: f.destiny }); continue; }
     if (RESERVADOS.has(clave(nombre))) plan.choquesConRutas.push(nombre);
     const g = grupos.get(clave(nombre)) ?? [];

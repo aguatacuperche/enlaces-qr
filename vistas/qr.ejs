@@ -32,11 +32,12 @@
           <%- radio('esquinas', 'cuadradas', '<svg viewBox="0 0 18 18"><rect x="2" y="2" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="6.5" y="6.5" width="5" height="5" fill="currentColor"/></svg>Cuadradas') %>
         </div>
       </fieldset>
-      <fieldset class="grupo"><legend>En el centro</legend>
+      <fieldset class="grupo"><legend>En medio</legend>
         <div class="segmento">
           <%- radio('centro', 'logo', '<img src="/marca/isotipo.svg" alt="">El logo del centro') %>
           <%- radio('centro', 'nada', 'Nada') %>
         </div>
+        <% if (!admiteLogo) { %><p class="nota">Con una dirección tan larga, el logo taparía una pieza que el móvil necesita para leerlo: este QR sale sin logo. Con un nombre más corto, cabe.</p><% } %>
       </fieldset>
       <fieldset class="grupo"><legend>Marco</legend>
         <div class="segmento">

@@ -7,6 +7,7 @@
  * - Todo va en una transacción: o entra entero o no entra nada.
  * - Al final comprueba los recuentos y que cada nombre lleva a su destino; si algo no cuadra, deshace.
  * - Con --probar hace lo mismo y deshace al final, para ver el resultado sin tocar la base.
+ * - Si algún enlace ya migrado se ha cambiado después en esta app, no lo pisa: para y lo dice. Con --forzar, sí.
  */
 import fs from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -15,7 +16,7 @@ import { conectar, migrar } from '../src/db.ts';
 import { planificar, type FilaEnlace, type FilaUsuario } from '../src/migracion.ts';
 import { reglasDelEntorno } from '../src/acceso.ts';
 
-const { values: a } = parseArgs({ options: { usuarios: { type: 'string' }, enlaces: { type: 'string' }, probar: { type: 'boolean', default: false } } });
+const { values: a } = parseArgs({ options: { usuarios: { type: 'string' }, enlaces: { type: 'string' }, probar: { type: 'boolean', default: false }, forzar: { type: 'boolean', default: false } } });
 if (!a.usuarios || !a.enlaces) {
   console.error('Uso: node --env-file=.env scripts/migrar.ts --usuarios usuarios.csv --enlaces enlaces.csv [--probar]');
   process.exit(2);
@@ -44,6 +45,17 @@ await migrar(bd);
 const c = await bd.connect();
 try {
   await c.query('begin');
+  // Lo ya migrado que alguien ha cambiado aquí después (destino, título, dueño…): repetir la migración lo desharía.
+  if (!a.forzar) {
+    const { rows: cambiados } = await c.query<{ id_antiguo: number; nombre: string }>(
+      `select e.id_antiguo, e.nombre from enlaces e join unnest($1::int[], $2::timestamptz[]) as p(id, actualizado) on p.id = e.id_antiguo
+       where e.actualizado > p.actualizado + interval '1 second'`,
+      [plan.enlaces.map(e => e.idAntiguo), plan.enlaces.map(e => e.actualizado)]);
+    if (cambiados.length) {
+      throw new Error(`Estos enlaces ya migrados se han cambiado después en esta app y la migración los desharía: `
+        + `${cambiados.map(r => r.nombre).join(', ')}. Si de verdad hay que volver a lo de la app anterior, repite con --forzar.`);
+    }
+  }
   const idDe = new Map<string, number>();
   for (const u of plan.usuarios) {
     const { rows } = await c.query<{ id: number }>(

@@ -19,7 +19,7 @@ export type Enlace = {
   elementos: number; elementos_mal: number;
 };
 
-export type Elemento = { id: number; titulo: string; url: string; problema: string | null; problema_detalle: string | null };
+export type Elemento = { id: number; titulo: string; url: string; problema: string | null; problema_detalle: string | null; aviso_ignorado: boolean };
 
 export function estadoDe(e: { activo: boolean; caduca: string | null }, dia = hoy()): Estado {
   if (!e.activo) return 'pausa';
@@ -49,12 +49,12 @@ const SELECT = `
     select sum(total)::int as total, (sum(total) filter (where dia > $1::date - 30))::int as mes
     from visitas where enlace_id = e.id) v on true
   left join lateral (
-    select count(*)::int as elementos, (count(*) filter (where problema is not null))::int as elementos_mal
+    select count(*)::int as elementos, (count(*) filter (where problema is not null and not aviso_ignorado))::int as elementos_mal
     from elementos where pagina_id = e.id) el on true`;
 
 /** Tiene algo que revisar: su destino no abre (y no se ha dado por bueno) o no abre alguno de sus enlaces. */
 const CON_PROBLEMA = `((e.problema is not null and not e.aviso_ignorado)
-  or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null))`;
+  or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null and not x.aviso_ignorado))`;
 
 export type Filtro = {
   /** Enlaces de este usuario; `null` = sin dueño (ni profesor ni programa); sin indicar = todos. */
@@ -265,7 +265,7 @@ export const MAX_ELEMENTOS = 30;
 
 export async function elementosDe(bd: Bd, paginaId: number): Promise<Elemento[]> {
   return (await bd.query<Elemento>(
-    'select id, titulo, url, problema, problema_detalle from elementos where pagina_id = $1 order by posicion, id', [paginaId])).rows;
+    'select id, titulo, url, problema, problema_detalle, aviso_ignorado from elementos where pagina_id = $1 order by posicion, id', [paginaId])).rows;
 }
 
 /** Página nueva, vacía y con nombre automático: se rellena en su ficha. */
@@ -297,17 +297,20 @@ export async function actualizarPagina(bd: Bd, id: number, d: DatosPagina): Prom
     await c.query(
       `update enlaces set nombre = $2, titulo = $3, descripcion = $4, etiqueta = $5, caduca = $6, activo = $7, actualizado = now()
        where id = $1`, [id, v.nombre, v.titulo, d.descripcion.trim().slice(0, 600) || null, v.etiqueta ?? null, v.caduca ?? null, v.activo ?? actual.activo]);
-    // Los enlaces que siguen igual conservan su última comprobación; los nuevos se comprobarán en la próxima ronda.
-    const { rows: antes } = await c.query<{ url: string; comprobado: Date | null; problema: string | null; problema_detalle: string | null }>(
-      'select url, comprobado, problema, problema_detalle from elementos where pagina_id = $1', [id]);
+    // Los enlaces que siguen igual conservan su última comprobación (con desde cuándo falla y si se dio por bueno, que
+    // cuentan para el informe); los nuevos se comprobarán en la próxima ronda.
+    const { rows: antes } = await c.query<{
+      url: string; comprobado: Date | null; problema: string | null; problema_detalle: string | null; problema_desde: Date | null; aviso_ignorado: boolean;
+    }>('select url, comprobado, problema, problema_detalle, problema_desde, aviso_ignorado from elementos where pagina_id = $1', [id]);
     const previos = new Map(antes.map(x => [x.url, x]));
     await c.query('delete from elementos where pagina_id = $1', [id]);
     for (const [i, x] of elementos.entries()) {
       const previo = previos.get(x.url);
       await c.query(
-        `insert into elementos (pagina_id, posicion, titulo, url, comprobado, problema, problema_detalle)
-         values ($1, $2, $3, $4, $5, $6, $7)`,
-        [id, i, x.titulo, x.url, previo?.comprobado ?? null, previo?.problema ?? null, previo?.problema_detalle ?? null]);
+        `insert into elementos (pagina_id, posicion, titulo, url, comprobado, problema, problema_detalle, problema_desde, aviso_ignorado)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [id, i, x.titulo, x.url, previo?.comprobado ?? null, previo?.problema ?? null, previo?.problema_detalle ?? null,
+          previo?.problema_desde ?? null, previo?.aviso_ignorado ?? false]);
     }
     await c.query('commit');
   } catch (e) {
@@ -322,4 +325,11 @@ export async function actualizarPagina(bd: Bd, id: number, d: DatosPagina): Prom
 /** El dueño da por bueno el aviso (no vale para los enlaces rotos). Vuelve a salir si cambia el problema. */
 export async function ignorarAviso(bd: Bd, id: number): Promise<void> {
   await bd.query("update enlaces set aviso_ignorado = true where id = $1 and problema in ('pide-sesion', 'formulario-cerrado')", [id]);
+}
+
+/** Lo mismo con uno de los enlaces de una página. */
+export async function ignorarAvisoElemento(bd: Bd, paginaId: number, elementoId: number): Promise<void> {
+  await bd.query(
+    "update elementos set aviso_ignorado = true where id = $2 and pagina_id = $1 and problema in ('pide-sesion', 'formulario-cerrado')",
+    [paginaId, elementoId]);
 }
