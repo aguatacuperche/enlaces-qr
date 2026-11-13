@@ -6,9 +6,11 @@ import { comprobarDestino, esIpInterna, problemaDeConexion, videoDeYoutube } fro
 // Un servidor local que imita los casos que se dan con los destinos reales.
 let servidor: http.Server;
 let base = '';
+let pedidas = 0;
 beforeAll(async () => {
   servidor = http.createServer((req, res) => {
     const ruta = req.url ?? '/';
+    pedidas++;
     const ir = (a: string) => { res.writeHead(302, { location: a }); res.end(); };
     if (ruta === '/bien') return res.end('ok');
     if (ruta === '/no-existe') { res.statusCode = 404; return res.end(); }
@@ -19,6 +21,7 @@ beforeAll(async () => {
     if (ruta === '/sin-head') { res.statusCode = req.method === 'HEAD' ? 405 : 200; return res.end(); }
     if (ruta === '/redirige') return ir('/bien');
     if (ruta === '/bucle') return ir('/bucle');
+    if (ruta === '/mal-redirige') return ir('http://[');
     if (ruta === '/documento-privado') return ir(`${base}/ServiceLogin?continue=x`);
     if (ruta.startsWith('/ServiceLogin')) return res.end('inicia sesión');
     if (ruta === '/formulario') return ir('/forms/d/e/abc/closedform');
@@ -68,8 +71,20 @@ describe('comprobación de destinos', () => {
     expect(pedidas).toBe(0);
   });
 
+  it('una redirección mal escrita es un destino roto, no un fallo que pare la ronda', async () => {
+    expect((await mirar('/mal-redirige'))?.detalle).toMatch(/mal escrita/);
+  });
+
+  it('mira la IP al conectar: un DNS que primero da una pública y luego una interna no cuela', async () => {
+    const antes = pedidas;
+    const puerto = new URL(base).port;
+    // La primera consulta (la de antes de conectar) dice que es pública; al conectar, localhost es 127.0.0.1.
+    expect(await comprobarDestino(`http://localhost:${puerto}/no-existe`, { resolver: async () => ['93.184.216.34'], espera: 800 })).toBeNull();
+    expect(pedidas).toBe(antes);
+  });
+
   it('distingue bien las direcciones internas de las públicas', () => {
-    for (const ip of ['127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.169.254', '::1', 'fe80::1', '::ffff:10.0.0.1']) expect(esIpInterna(ip), ip).toBe(true);
+    for (const ip of ['127.0.0.1', '10.1.2.3', '172.20.0.1', '192.168.1.1', '169.254.169.254', '::1', '::', '::7f00:1', '64:ff9b::a00:1', 'fe80::1', '::ffff:10.0.0.1']) expect(esIpInterna(ip), ip).toBe(true);
     // Una IPv4 pública no puede salir como interna (pasó con el rango ::ffff:0:0/96 en la lista).
     for (const ip of ['8.8.8.8', '142.250.184.14', '2a00:1450:4003:80e::200e', '::ffff:8.8.8.8']) expect(esIpInterna(ip), ip).toBe(false);
   });

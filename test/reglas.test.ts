@@ -56,10 +56,17 @@ describe('nombres de enlace', () => {
     expect(nombreDesdeTexto('  ¿Menú de octubre?  ')).toBe('menu-de-octubre');
   });
   it('encuentra el enlace parecido cuando hay una errata', () => {
+    const n = (...nombres: string[]) => nombres.map(nombre => ({ nombre, clave: clave(nombre) }));
     expect(distancia('excursion-mueso', 'excursion-museo')).toBe(2);
-    expect(parecido('excursion-mueso', ['matricula', 'excursion-museo'])).toBe('excursion-museo');
-    expect(parecido('notas', ['notas'])).toBeNull();
-    expect(parecido('abc', ['abd'])).toBeNull();
-    expect(parecido('zzzzzzz', ['matricula'])).toBeNull();
+    expect(parecido('excursion-mueso', n('matricula', 'excursion-museo'))).toBe('excursion-museo');
+    expect(parecido('notas', n('notas'))).toBeNull();
+    expect(parecido('abc', n('abd'))).toBeNull();
+    expect(parecido('zzzzzzz', n('matricula'))).toBeNull();
+  });
+  it('la distancia deja de contar en cuanto pasa de 2, y da lo mismo que contándolo todo', () => {
+    expect(distancia('matricula', 'matricula')).toBe(0);
+    expect(distancia('matricula', 'matriculas')).toBe(1);
+    expect(distancia('abcdefgh', 'zyxwvuts')).toBe(3);
+    expect(distancia('menu-octubre', 'menu-noviembre')).toBe(3);
   });
 });

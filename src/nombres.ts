@@ -52,28 +52,34 @@ export function nombreDesdeTexto(texto: string): string {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, LARGO_MAXIMO).replace(/-+$/, '');
 }
 
-/** Distancia de edición, para proponer el enlace correcto cuando alguien se equivoca en una o dos letras. */
+/**
+ * Distancia de edición, para proponer el enlace correcto cuando alguien se equivoca en una o dos letras. Solo importa
+ * hasta 2: en cuanto una fila entera pasa de ahí, se deja de calcular y da 3.
+ */
 export function distancia(a: string, b: string): number {
   if (Math.abs(a.length - b.length) > 2) return 3;
   let previa = Array.from({ length: b.length + 1 }, (_, j) => j);
   for (let i = 1; i <= a.length; i++) {
     const actual = [i];
+    let menor = i;
     for (let j = 1; j <= b.length; j++) {
       actual[j] = Math.min(previa[j] + 1, actual[j - 1] + 1, previa[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (actual[j] < menor) menor = actual[j];
     }
+    if (menor > 2) return 3;
     previa = actual;
   }
-  return previa[b.length];
+  return Math.min(previa[b.length], 3);
 }
 
-/** El nombre existente más parecido (a 1 o 2 letras), o null. */
-export function parecido(buscado: string, existentes: Iterable<string>): string | null {
+/** El nombre existente más parecido (a 1 o 2 letras), o null. `clave` es la de `nombre`, ya calculada. */
+export function parecido(buscado: string, existentes: Iterable<{ nombre: string; clave: string }>): string | null {
   const k = clave(buscado);
   if (k.length < 4) return null;
   let mejor: string | null = null, mejorD = 3;
   for (const e of existentes) {
-    const d = distancia(k, clave(e));
-    if (d > 0 && d < mejorD) { mejor = e; mejorD = d; }
+    const d = distancia(k, e.clave);
+    if (d > 0 && d < mejorD) { mejor = e.nombre; mejorD = d; }
   }
   return mejor;
 }

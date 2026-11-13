@@ -4,7 +4,8 @@
   <div class="nf-caja">
     <h1><%= titulo %></h1>
     <p><%= mensaje %></p>
-    <a class="btn" href="/panel">Volver a mis enlaces</a>
+    <% const salida = locals.enlace ?? (locals.usuario ? { href: '/panel', texto: 'Volver a mis enlaces' } : centro.web ? { href: centro.web, texto: 'Ir a la web del centro' } : null); %>
+    <% if (salida) { %><a class="btn" href="<%= salida.href %>"><%= salida.texto %></a><% } %>
   </div>
 </main>
 </body>

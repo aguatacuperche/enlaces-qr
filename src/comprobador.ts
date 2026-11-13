@@ -63,16 +63,29 @@ export async function comprobarLote(bd: Bd, op: Opciones = {}, pausaMs = PAUSA_M
   ];
   const repetir: typeof tareas = [];
   for (const t of tareas) {
-    const p = await comprobarDestino(t.url, op);
+    const p = await comprobarSinRomper(t.url, op);
     if (pasajero(p)) repetir.push(t);
     else await t.guardar(p);
     await espera(pausaMs);
   }
   if (repetir.length) {
     await espera(repetirTrasMs);
-    for (const t of repetir) await t.guardar(await comprobarDestino(t.url, op));
+    for (const t of repetir) await t.guardar(await comprobarSinRomper(t.url, op));
   }
   return tareas.length;
+}
+
+/**
+ * Un fallo inesperado con un destino no puede parar la ronda: ese enlace se quedaría el primero de la cola y la
+ * pararía otra vez cada hora, sin que se comprobara nada más ni saliera el informe.
+ */
+async function comprobarSinRomper(url: string, op: Opciones): Promise<Problema | null> {
+  try {
+    return await comprobarDestino(url, op);
+  } catch (e) {
+    console.error(`Comprobación de ${url}:`, e);
+    return { codigo: 'error', detalle: 'No se ha podido comprobar: la web contesta algo que no se entiende.' };
+  }
 }
 
 let enMarcha = false;

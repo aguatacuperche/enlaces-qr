@@ -28,7 +28,7 @@
   </section>
 
   <section class="tarjeta" style="margin-bottom:18px">
-    <form class="pasar" method="post" action="/panel/usuarios/pasar">
+    <form class="pasar" method="post" action="/panel/usuarios/pasar" data-confirmar="¿Pasar todos esos enlaces?" data-confirmar-texto="Dejarán de ser de quien los tiene ahora. Siguen funcionando igual." data-confirmar-boton="Pasar">
       <b>Pasar todos los enlaces de</b>
       <select name="de" aria-label="De">
         <option value="sin">Sin dueño (<%= sinDueno %>)</option>
@@ -40,15 +40,15 @@
       </select>
       <button class="btn suave peq">Pasar</button>
     </form>
-    <p class="nota">Para cuando un profesor se va del centro: sus enlaces siguen funcionando y pasan a otro.</p>
+    <p class="nota">Para cuando alguien se va del centro: sus enlaces siguen funcionando y pasan a otro. Después, quítale el acceso en la tabla de abajo.</p>
   </section>
 
   <table class="lista usuarios">
-    <thead><tr><th>Nombre</th><th>Correo</th><th>Enlaces</th><th>Con problemas</th><th>Última entrada</th><th>Administrador</th></tr></thead>
+    <thead><tr><th>Nombre</th><th>Correo</th><th>Enlaces</th><th>Con problemas</th><th>Última entrada</th><th>Administrador</th><th>Acceso</th></tr></thead>
     <tbody>
     <% for (const u of usuarios) { %>
-      <tr class="<%= u.con_problemas ? 'fila-rota' : '' %>">
-        <td class="nom"><b><%= u.nombre %></b></td>
+      <tr class="<%= u.con_problemas ? 'fila-rota' : '' %><%= u.bloqueado ? ' sin-acceso' : '' %>">
+        <td class="nom"><b><%= u.nombre %></b><% if (u.bloqueado) { %> <span class="chip-gris">Sin acceso</span><% } %></td>
         <td><%= u.correo %></td>
         <td><%= u.enlaces %></td>
         <td>
@@ -64,7 +64,15 @@
           <% } else { %>
           <form method="post" action="/panel/usuarios/<%= u.id %>/admin">
             <input type="hidden" name="admin" value="<%= u.admin ? 'no' : 'si' %>">
-            <button class="estado"><span class="interruptor <%= u.admin ? 'si' : '' %>"></span><%= u.admin ? 'Sí' : 'No' %></button>
+            <button class="estado" <%= u.bloqueado ? 'disabled' : '' %> aria-pressed="<%= u.admin ? 'true' : 'false' %>" aria-label="Administrador: <%= u.nombre %>"><span class="interruptor <%= u.admin ? 'si' : '' %>"></span><%= u.admin ? 'Sí' : 'No' %></button>
+          </form>
+          <% } %>
+        </td>
+        <td>
+          <% if (u.id !== usuario.id) { %>
+          <form method="post" action="/panel/usuarios/<%= u.id %>/acceso" <% if (!u.bloqueado) { %>data-confirmar="¿Quitarle el acceso a <%= u.nombre %>?" data-confirmar-texto="No podrá entrar y se cerrarán sus sesiones abiertas. Sus enlaces siguen funcionando: pásalos a otro arriba." data-confirmar-boton="Quitar el acceso"<% } %>>
+            <input type="hidden" name="bloqueado" value="<%= u.bloqueado ? 'no' : 'si' %>">
+            <button class="btn <%= u.bloqueado ? 'suave' : 'peligro' %> peq"><%= u.bloqueado ? 'Devolver el acceso' : 'Quitar el acceso' %></button>
           </form>
           <% } %>
         </td>

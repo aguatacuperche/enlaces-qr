@@ -149,10 +149,12 @@ export async function nombreLibre(bd: Bd, nombre: string, salvoId?: number): Pro
 }
 
 export async function nombreAutomaticoLibre(bd: Bd): Promise<string> {
-  for (;;) {
+  // Hay 23⁴ (casi 280.000): solo se acabarían con muchísimos enlaces, pero el bucle no puede quedarse dando vueltas.
+  for (let intento = 0; intento < 50; intento++) {
     const n = generarAutomatico();
     if (await nombreLibre(bd, n)) return n;
   }
+  throw new ErrorDeFormulario('nombre', 'No se ha encontrado un nombre automático libre: escribe uno.');
 }
 
 /** Escribe el nombre como se guarda: los automáticos en mayúsculas y el resto en minúsculas. */
@@ -161,13 +163,27 @@ export function limpiarNombre(nombre: string): string {
   return esAutomatico(n.toUpperCase()) && n === n.toUpperCase() ? n : n.toLowerCase();
 }
 
+/** Más largo no lo genera ninguna web corriente, y un programa con un fallo no puede llenar la memoria de direcciones. */
+export const LARGO_MAXIMO_DESTINO = 2048;
+
 export function problemaConDestino(destino: string): string | null {
+  const d = destino.trim();
+  if (d.length > LARGO_MAXIMO_DESTINO) return `Esa dirección es demasiado larga (más de ${LARGO_MAXIMO_DESTINO} caracteres).`;
+  // Caracteres que no se ven (a veces se cuelan al copiar): la redirección saldría rota.
+  if (/[\u0000-\u001f\u007f]/.test(d)) return 'La dirección tiene caracteres invisibles: cópiala otra vez.';
   let u: URL;
-  try { u = new URL(destino.trim()); } catch { return 'Pega una dirección completa, que empiece por https://'; }
+  try { u = new URL(d); } catch { return 'Pega una dirección completa, que empiece por https://'; }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') return 'Tiene que empezar por https:// o http://';
   if (!u.hostname.includes('.')) return 'Esa dirección no parece completa.';
-  if (u.host === new URL(config.urlPublica).host) return 'No puede llevar a otro enlace de esta misma app.';
+  // También con un punto al final del dominio («ejemplo.es.»), que lleva al mismo sitio y haría un bucle.
+  if (u.hostname.replace(/\.$/, '') === new URL(config.urlPublica).hostname) return 'No puede llevar a otro enlace de esta misma app.';
   return null;
+}
+
+/** Una fecha de verdad (no el 31 de febrero), en el formato del calendario del navegador. */
+export function esFecha(texto: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(texto) && !Number.isNaN(Date.parse(texto + 'T00:00:00Z'))
+    && new Date(texto + 'T00:00:00Z').toISOString().slice(0, 10) === texto;
 }
 
 export type DatosEnlace = { nombre: string; destino: string; titulo: string; etiqueta?: string; caduca?: string; activo?: boolean };
@@ -184,7 +200,7 @@ async function validar(bd: Bd, d: DatosEnlace, salvoId?: number, nombreAnterior?
   const pd = esPagina ? null : problemaConDestino(destino);
   if (pd) throw new ErrorDeFormulario('destino', pd);
   const caduca = d.caduca?.trim() || undefined;
-  if (caduca && !/^\d{4}-\d{2}-\d{2}$/.test(caduca)) throw new ErrorDeFormulario('caduca', 'Fecha no válida.');
+  if (caduca && !esFecha(caduca)) throw new ErrorDeFormulario('caduca', 'Fecha no válida.');
   return {
     nombre: nombreAnterior !== undefined && clave(nombre) === clave(nombreAnterior) ? nombreAnterior : nombre,
     destino, caduca, activo: d.activo,

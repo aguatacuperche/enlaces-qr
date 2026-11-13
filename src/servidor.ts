@@ -16,21 +16,39 @@ import { iniciarComprobaciones } from './comprobador.ts';
 import { crearCartero, type Cartero } from './correo.ts';
 import { contexto, iniciarInformes } from './informe.ts';
 import { elementosDe, enlacePorId } from './enlaces.ts';
-import { contarVisita, cuentaComoVisita, recargar, resolver } from './redireccion.ts';
+import { contarVisita, cuentaComoVisita, recargar, resolver, volcarVisitas } from './redireccion.ts';
 import { dibujarQR } from './qr/dibujo.ts';
-import { png } from './qr/exportar.ts';
-import { leerOpciones, POR_DEFECTO } from './qr/opciones.ts';
+import { pngAparte } from './qr/exportar.ts';
+import { aConsulta, leerOpciones, POR_DEFECTO } from './qr/opciones.ts';
 import { cargarMarca, cssDeMarca, ficheroDeMarca } from './marca.ts';
 import { pngEslabonRoto } from './ilustracion.ts';
 
 const require = createRequire(import.meta.url);
 
-/** Los formularios solo se aceptan si vienen de la propia app (además de la cookie SameSite=Lax). */
+/** Los formularios solo se aceptan si vienen de la propia app (además de la cookie SameSite=Lax): esquema, servidor y puerto. */
 function mismoOrigen(req: Request, res: Response, next: NextFunction) {
   if (req.method === 'GET' || req.method === 'HEAD') return next();
   const origen = req.get('origin') ?? req.get('referer');
-  if (origen && URL.canParse(origen) && new URL(origen).host === new URL(config.urlPublica).host) return next();
-  res.status(403).send('Petición rechazada.');
+  if (origen && URL.canParse(origen) && new URL(origen).origin === new URL(config.urlPublica).origin) return next();
+  res.status(403).render('error', { titulo: 'Petición rechazada', mensaje: 'Esta acción solo se puede hacer desde la propia página. Vuelve atrás, recarga y prueba otra vez.' });
+}
+
+/**
+ * Los QR públicos (/svg y /png): los últimos que se han pedido se guardan ya hechos, y los PNG se dibujan fuera del
+ * hilo principal y como mucho unos pocos a la vez. Un PNG cuesta una décima de segundo: sin esto, quien pidiera muchos
+ * a la vez frenaría las redirecciones de los QR impresos.
+ */
+const QR_GUARDADOS = 100, PNG_EN_COLA = 4;
+const qrHechos = new Map<string, Buffer | string>();
+let pngDibujando = 0;
+function qrGuardado(k: string): Buffer | string | undefined {
+  const v = qrHechos.get(k);
+  if (v !== undefined) { qrHechos.delete(k); qrHechos.set(k, v); }  // el más usado pasa al final: sale el último
+  return v;
+}
+function guardarQr(k: string, v: Buffer | string) {
+  qrHechos.set(k, v);
+  if (qrHechos.size > QR_GUARDADOS) qrHechos.delete(qrHechos.keys().next().value!);
 }
 
 export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.env, new URL(config.urlPublica).host)) {
@@ -95,15 +113,28 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
   // opciones del creador por la consulta (?fondo=transparente&color=principal…), para los programas que pintan el QR
   // de sus enlaces; sin consulta, sin marco, como siempre. El PNG sale siempre a 600 px: es pública y sin sesión.
   // Otras webs pueden ponerlas en un <img>: helmet las dejaría solo para esta (Cross-Origin-Resource-Policy).
-  app.get(['/svg/:nombre', '/png/:nombre'], (req, res) => {
+  app.get(['/svg/:nombre', '/png/:nombre'], async (req, res) => {
     res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     const r = resolver(req.params.nombre as string);
     if (r.tipo === 'no-existe') return noEncontrado(res, r);
-    const nombre = r.tipo === 'ir' || r.tipo === 'pagina' ? (req.params.nombre as string) : r.nombre;
-    const svg = dibujarQR(urlCorta(nombre), leerOpciones(req.query, { ...POR_DEFECTO, marco: 'no' }), nombre);
+    // Siempre con el nombre guardado, no con lo que llega: /png/NOTAS y /png/notas%E3%80%80 son el mismo QR.
+    const nombre = r.nombre;
+    const opciones = leerOpciones(req.query, { ...POR_DEFECTO, marco: 'no' });
+    const esSvg = req.path.startsWith('/svg/');
+    const k = `${esSvg ? 'svg' : 'png'}|${nombre}|${aConsulta(opciones)}`;
+    let hecho = qrGuardado(k);
+    if (hecho === undefined) {
+      const svg = dibujarQR(urlCorta(nombre), opciones, nombre);
+      if (esSvg) hecho = svg;
+      else {
+        if (pngDibujando >= PNG_EN_COLA) return res.status(503).set('Retry-After', '5').type('text').send('Demasiadas peticiones: prueba dentro de unos segundos.');
+        pngDibujando++;
+        try { hecho = await pngAparte(svg, 600); } finally { pngDibujando--; }
+      }
+      guardarQr(k, hecho);
+    }
     res.set('Cache-Control', 'public, max-age=3600');
-    if (req.path.startsWith('/svg/')) res.type('image/svg+xml').send(svg);
-    else res.type('image/png').send(png(svg, 600));
+    res.type(esSvg ? 'image/svg+xml' : 'image/png').send(hecho);
   });
 
   // Lo principal: <dominio>/<nombre>.
@@ -111,7 +142,7 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
     const r = resolver(req.params.nombre as string);
     if (r.tipo !== 'ir' && r.tipo !== 'pagina') return noEncontrado(res, r);
     if (cuentaComoVisita(req.method, req.get('user-agent'))) {
-      contarVisita(bd, r.id).catch(e => console.error('No se ha podido contar la visita:', e));
+      contarVisita(r.id);
     }
     if (r.tipo === 'ir') return res.set('Cache-Control', 'private, no-store').redirect(302, r.destino);
     // Una página con varios enlaces: se enseña aquí mismo.
@@ -146,12 +177,15 @@ export async function arrancar() {
   if (aplicadas.length) console.log('Migraciones aplicadas:', aplicadas.join(', '));
   await recargar(bd);
   setInterval(() => recargar(bd).catch(e => console.error('Recarga de enlaces:', e)), 60_000).unref();
+  setInterval(() => volcarVisitas(bd).catch(e => console.error('No se han podido guardar las visitas:', e)), 5_000).unref();
   iniciarComprobaciones(bd);
   const cartero = crearCartero(process.env, new URL(config.urlPublica).host);
   if (cartero) console.log(`Correo: ${cartero.descripcion}.`);
   iniciarInformes(bd, cartero, () => contexto(config.urlPublica, config.centro.pie));
   const servidor = crearApp(bd, cartero).listen(config.puerto, () => console.log(`Escuchando en el puerto ${config.puerto} (${config.urlPublica})`));
-  const parar = () => servidor.close(() => bd.end().then(() => process.exit(0)));
+  // Al parar (una actualización, un reinicio), las visitas que aún estaban en memoria se guardan antes de cerrar.
+  const parar = () => servidor.close(() => volcarVisitas(bd).catch(e => console.error('No se han podido guardar las visitas:', e))
+    .finally(() => bd.end().then(() => process.exit(0))));
   process.on('SIGTERM', parar);
   process.on('SIGINT', parar);
 }

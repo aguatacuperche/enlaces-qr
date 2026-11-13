@@ -5,6 +5,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Bd } from './db.ts';
 import { enlacePorId, ErrorDeFormulario, type Enlace } from './enlaces.ts';
+import { hoy } from './fechas.ts';
 import { clave } from './nombres.ts';
 
 export type Programa = {
@@ -52,6 +53,7 @@ export async function crearPrograma(bd: Bd, usuarioId: number, d: DatosPrograma)
     const { rows } = await bd.query<{ id: number }>(
       'insert into programas (nombre, llave, dominios, por_minuto, creado_por) values ($1, $2, $3, $4, $5) returning id',
       [v.nombre, huella(llave), v.dominios, v.porMinuto, usuarioId]);
+    olvidarLlaves();
     return { id: rows[0].id, llave };
   } catch (e) {
     throw nombreRepetido(e, v.nombre);
@@ -62,6 +64,7 @@ export async function cambiarPrograma(bd: Bd, id: number, d: DatosPrograma): Pro
   const v = validar(d);
   try {
     await bd.query('update programas set nombre = $2, dominios = $3, por_minuto = $4 where id = $1', [id, v.nombre, v.dominios, v.porMinuto]);
+    olvidarLlaves();
   } catch (e) {
     throw nombreRepetido(e, v.nombre);
   }
@@ -71,12 +74,14 @@ export async function cambiarPrograma(bd: Bd, id: number, d: DatosPrograma): Pro
 export async function cambiarLlave(bd: Bd, id: number): Promise<string> {
   const llave = llaveNueva();
   await bd.query('update programas set llave = $2, activo = true where id = $1', [id, huella(llave)]);
+  olvidarLlaves();
   return llave;
 }
 
 /** Su llave deja de valer; sus enlaces siguen funcionando y se pueden pasar a un profesor. */
 export async function retirarPrograma(bd: Bd, id: number): Promise<void> {
   await bd.query('update programas set activo = false where id = $1', [id]);
+  olvidarLlaves();
 }
 
 export async function listarProgramas(bd: Bd): Promise<Programa[]> {
@@ -91,11 +96,25 @@ export async function programaPorId(bd: Bd, id: number): Promise<Programa | unde
   return (await listarProgramas(bd)).find(p => p.id === id);
 }
 
-/** El programa activo con esa llave, o nada. */
+/**
+ * Las llaves de los programas activos (por su huella), en memoria: así una llave mala no llega a la base, por muchas
+ * que se prueben. Se vuelven a leer cada minuto y en cuanto un administrador cambia algo de un programa.
+ */
+let llaves: { leidas: number; porHuella: Map<string, ProgramaActivo> } | null = null;
+const olvidarLlaves = () => { llaves = null; };
+
 export async function programaPorLlave(bd: Bd, llave: string): Promise<ProgramaActivo | undefined> {
   if (!llave) return undefined;
-  return (await bd.query<ProgramaActivo>(
-    'select id, nombre, dominios, por_minuto from programas where llave = $1 and activo', [huella(llave)])).rows[0];
+  if (!llaves || Date.now() - llaves.leidas > 60_000) {
+    const { rows } = await bd.query<ProgramaActivo & { llave: string }>('select id, nombre, dominios, por_minuto, llave from programas where activo');
+    llaves = { leidas: Date.now(), porHuella: new Map(rows.map(({ llave: h, ...p }) => [h, p])) };
+  }
+  return llaves.porHuella.get(huella(llave));
+}
+
+/** Cuántos enlaces tiene ya un programa (tienen un tope: ver api.ts). */
+export async function enlacesDelPrograma(bd: Bd, id: number): Promise<number> {
+  return (await bd.query<{ n: number }>('select count(*)::int as n from enlaces where programa_id = $1', [id])).rows[0].n;
 }
 
 export async function apuntarUso(bd: Bd, id: number): Promise<void> {
@@ -110,7 +129,9 @@ export async function enlaceDelPrograma(bd: Bd, programaId: number, nombre: stri
 
 /** El enlace más reciente de este programa hacia ese destino, si ya tiene uno. */
 export async function enlaceDelProgramaHacia(bd: Bd, programaId: number, destino: string): Promise<Enlace | undefined> {
+  // Solo uno que funcione: uno en pausa o caducado llevaría a la página de «no disponible».
   const { rows } = await bd.query<{ id: number }>(
-    'select id from enlaces where programa_id = $1 and destino = $2 order by id desc limit 1', [programaId, destino]);
+    `select id from enlaces where programa_id = $1 and destino = $2 and activo and (caduca is null or caduca >= $3::date)
+     order by id desc limit 1`, [programaId, destino, hoy()]);
   return rows[0] ? enlacePorId(bd, rows[0].id) : undefined;
 }

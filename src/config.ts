@@ -10,6 +10,11 @@ function leer(nombre: string, porDefecto?: string): string {
 const produccion = process.env.NODE_ENV === 'production';
 const entradaDePrueba = process.env.ENTRADA_DE_PRUEBA === 'si';
 if (produccion && entradaDePrueba) throw new Error('ENTRADA_DE_PRUEBA no se puede usar en producción');
+// Con la entrada de prueba cualquiera entra con el correo que escriba, también el de un administrador: solo en el
+// propio ordenador, aunque alguien instale la app sin Docker y se olvide de NODE_ENV.
+if (entradaDePrueba && process.env.URL_PUBLICA && !['localhost', '127.0.0.1', '[::1]'].includes(new URL(process.env.URL_PUBLICA).hostname)) {
+  throw new Error('ENTRADA_DE_PRUEBA solo vale con URL_PUBLICA en localhost: quítala del .env');
+}
 const nombreCentro = process.env.NOMBRE_CENTRO || 'Mi centro';
 
 export const config = {
@@ -24,6 +29,8 @@ export const config = {
   google: entradaDePrueba ? null : { id: leer('GOOGLE_CLIENT_ID'), secreto: leer('GOOGLE_CLIENT_SECRET') },
   /** Dominio de correo del centro y cuentas que no pueden entrar. */
   acceso: reglasDelEntorno(),
+  /** Correos que son administradores al entrar (ADMINISTRADORES): así se nombra al primero en una instalación nueva. */
+  administradores: new Set((process.env.ADMINISTRADORES ?? '').split(/[\s,;]+/).map(c => c.trim().toLowerCase()).filter(Boolean)),
   centro: {
     nombre: nombreCentro,
     /** Texto del pie de las páginas públicas. */
