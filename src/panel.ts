@@ -4,7 +4,7 @@ import type { Bd } from './db.ts';
 import { exigirAdmin, exigirUsuario } from './entrada.ts';
 import {
   actualizarEnlace, actualizarPagina, borrarEnlace, cambiarActivo, cambiarDueno, crearEnlace, crearPagina, elementosDe,
-  enlacePorId, ErrorDeFormulario, etiquetas, ignorarAviso, ignorarAvisoElemento, limpiarNombre, listarEnlaces, MAX_ELEMENTOS, nombreAutomaticoLibre,
+  aCsv, enlacePorId, ErrorDeFormulario, etiquetas, filasParaExportar, POR_PAGINA, visitasParaExportar, ignorarAviso, ignorarAvisoElemento, limpiarNombre, listarEnlaces, MAX_ELEMENTOS, nombreAutomaticoLibre,
   nombreLibre, recuento, seriesDiarias, seriesSemanales, type Enlace, type Estado, type Filtro,
 } from './enlaces.ts';
 import { comprobarEnlace } from './comprobador.ts';
@@ -91,9 +91,10 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
     const programa = vista === 'todos' && !sinDueno && req.query.programa ? await programaPorId(bd, Number(req.query.programa)) : undefined;
     const base: Filtro = vista === 'mios' ? { usuarioId: u.id } : sinDueno ? { usuarioId: null } : programa ? { programaId: programa.id } : {};
     const filtro = { ...base, ...filtroDesde(req.query) };
-    const enlaces = await listarEnlaces(bd, filtro);
+    const pagina = entero(req.query.pagina, 1, 100_000, 1);
+    const { enlaces, hayMas } = await listarEnlaces(bd, filtro, pagina);
     res.status(formulario ? 422 : 200).render('panel', {
-      vista, filtro, sinDueno, programa, enlaces,
+      vista, filtro, sinDueno, programa, enlaces, pagina, hayMas, porPagina: POR_PAGINA,
       series: await seriesDiarias(bd, enlaces.map(e => e.id)),
       cuentas: await recuento(bd, base),
       etiquetas: await etiquetas(bd, base.usuarioId, base.programaId),
@@ -112,6 +113,16 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
   // ---------- Ayuda ----------
 
   r.get('/ayuda', (_req, res) => res.render('ayuda', { maxElementos: MAX_ELEMENTOS }));
+
+  // Sacar los datos en CSV: los enlaces propios o, para un administrador con ?todos=1, todos.
+  r.get(['/exportar.csv', '/visitas.csv'], async (req, res) => {
+    const u = usuarioDe(res);
+    const todos = u.admin && req.query.todos === '1';
+    const visitas = req.path.startsWith('/visitas');
+    const filas = visitas ? await visitasParaExportar(bd, todos ? null : u.id) : await filasParaExportar(bd, todos ? null : u.id);
+    res.attachment(`${visitas ? 'visitas' : 'enlaces'}-${todos ? 'todos' : 'mios'}-${new Date().toISOString().slice(0, 10)}.csv`);
+    res.set('Cache-Control', 'private, no-store').type('text/csv; charset=utf-8').send(aCsv(filas));
+  });
   r.post('/ayuda/cerrar', async (req, res) => {
     await cerrarAyuda(bd, usuarioDe(res).id);
     res.redirect(volverA(req));

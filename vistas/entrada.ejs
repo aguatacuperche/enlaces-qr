@@ -7,7 +7,7 @@
     <% if (rechazo) { %>
       <div class="aviso mal" role="alert">
         <% if (rechazo.motivo === 'excluido') { %>
-          <b>Esta cuenta no tiene acceso</b><%= dominio %> es solo para los profesores del centro. Has entrado con <strong><%= rechazo.correo %></strong>.
+          <b>Esta cuenta no tiene acceso</b><%= dominio %> es solo para las cuentas del centro que tienen acceso. Has entrado con <strong><%= rechazo.correo %></strong>.
         <% } else if (rechazo.motivo === 'otro-dominio') { %>
           <b>Esa cuenta no es del centro</b>Entra con tu cuenta @<%= dominioCorreo %><% if (rechazo.correo) { %>, no con <strong><%= rechazo.correo %></strong><% } %>.
         <% } else if (rechazo.motivo === 'bloqueado') { %>

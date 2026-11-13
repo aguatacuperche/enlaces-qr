@@ -9,7 +9,8 @@
 <%- include('parciales/cabeza', { titulo: e.titulo }) %>
 <%- include('parciales/barra', { seccion: usuario.id === e.usuario_id ? 'mios' : 'todos' }) %>
 <main class="cuerpo">
-  <div class="miga"><a href="/panel"><svg class="i"><use href="#i-volver"/></svg>Mis enlaces</a><span>/</span><b><%= e.titulo %></b></div>
+  <% const mio = usuario.id === e.usuario_id; %>
+  <div class="miga"><a href="<%= mio ? '/panel' : '/panel/todos' %>"><svg class="i"><use href="#i-volver"/></svg><%= mio ? 'Mis enlaces' : 'Todos los enlaces' %></a><span aria-hidden="true">/</span><h1><%= e.titulo %></h1></div>
   <% if (nueva) { %><p class="aviso bien" role="status">Página creada. Ponle un título, una explicación si hace falta, y añade sus enlaces. Su QR lleva a todos ellos.</p><% } %>
   <% if (guardado) { %><p class="aviso bien" role="status">Guardado.</p><% } %>
   <% if (comprobado) { %><p class="aviso bien" role="status">Comprobado ahora.</p><% } %>
@@ -18,7 +19,7 @@
     <section class="tarjeta">
       <h2>Visitas por semana</h2>
       <p class="sub"><%= corta(e.nombre) %> · últimas 12 semanas</p>
-      <div class="grafico" data-grafico><%- graficoSemanas(semanas) %><div class="ayuda-grafico"></div></div>
+      <div class="grafico" data-grafico><%- graficoSemanas(semanas, esPagina ? 440 : 560) %><div class="ayuda-grafico"></div></div>
       <dl class="datos" style="margin-top:16px">
         <dt>En total</dt><dd><%= numero(e.visitas) %> visitas<% if (e.visitas_anteriores) { %> (<%= numero(e.visitas_anteriores) %> de la app anterior, sin fechas)<% } %></dd>
         <dt>Últimos 30 días</dt><dd><%= numero(e.visitas_mes) %></dd>
@@ -103,14 +104,14 @@
           <label><span>Destino</span><div class="campo <%= mal('destino') %>"><input name="destino" type="url" required value="<%= d.destino %>"></div>
             <small>Puedes cambiarlo cuando quieras: los carteles y QR impresos llevarán al nuevo destino.</small></label>
         <% } %>
-        <label><span>Nombre</span><div class="campo <%= mal('nombre') %>"><span><%= dominio %>/</span><input name="nombre" required value="<%= d.nombre %>" spellcheck="false"></div>
+        <label><span>Nombre</span><div class="campo <%= mal('nombre') %>"><span><%= dominio %>/</span><input name="nombre" required value="<%= d.nombre %>" spellcheck="false" autocapitalize="none" autocorrect="off" <%= mal('nombre') ? 'aria-invalid=true' : '' %>></div>
           <small>Si lo cambias, los carteles y QR que ya estén impresos dejarán de funcionar.</small></label>
         <div class="dos">
           <label><span>Etiqueta</span><div class="campo"><input name="etiqueta" value="<%= d.etiqueta %>" maxlength="30" placeholder="Familias, Comedor…"></div></label>
           <label><span>Caduca el</span><div class="campo <%= mal('caduca') %>"><input name="caduca" type="date" value="<%= d.caduca %>"></div><small>Opcional. Después, avisa de que ya no está disponible.</small></label>
         </div>
         <label class="casilla"><input type="checkbox" name="activo" value="si" <%= d.activo === 'si' ? 'checked' : '' %>>Activo (si lo quitas, <%= esPagina ? 'la página queda' : 'el enlace queda' %> en pausa)</label>
-        <div class="botonera"><button class="btn">Guardar</button><a class="btn fantasma" href="/panel">Cancelar</a></div>
+        <div class="botonera"><button class="btn">Guardar</button><a class="btn fantasma" href="<%= mio ? '/panel' : '/panel/todos' %>">Cancelar</a></div>
       </form>
       <% if (esPagina) { %>
         <template id="plantilla-elemento">

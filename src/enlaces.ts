@@ -84,10 +84,15 @@ function condiciones(f: Filtro, params: unknown[]): string {
   return w.length ? ' where ' + w.join(' and ') : '';
 }
 
-export async function listarEnlaces(bd: Bd, f: Filtro): Promise<Enlace[]> {
+/** Enlaces por página del listado: con miles, la página entera no cabría en memoria ni la querría nadie. */
+export const POR_PAGINA = 100;
+
+/** Una página del listado (desde 1) y si hay más detrás. */
+export async function listarEnlaces(bd: Bd, f: Filtro, pagina = 1): Promise<{ enlaces: Enlace[]; hayMas: boolean }> {
   const params: unknown[] = [hoy()];
   const orden = { recientes: 'e.creado desc, e.id desc', visitas: 'visitas desc, e.id desc', titulo: 'lower(e.titulo), e.id' }[f.orden ?? 'recientes'];
-  return (await bd.query<Enlace>(SELECT + condiciones(f, params) + ` order by ${orden}`, params)).rows;
+  const { rows } = await bd.query<Enlace>(SELECT + condiciones(f, params) + ` order by ${orden} limit ${POR_PAGINA + 1} offset ${(pagina - 1) * POR_PAGINA}`, params);
+  return { enlaces: rows.slice(0, POR_PAGINA), hayMas: rows.length > POR_PAGINA };
 }
 
 /** Cuántos hay en cada estado, para los botones de filtro. */
@@ -332,4 +337,44 @@ export async function ignorarAvisoElemento(bd: Bd, paginaId: number, elementoId:
   await bd.query(
     "update elementos set aviso_ignorado = true where id = $2 and pagina_id = $1 and problema in ('pide-sesion', 'formulario-cerrado')",
     [paginaId, elementoId]);
+}
+
+// ---------- Sacar los datos (CSV) ----------
+
+/**
+ * Todo lo de los enlaces, para llevárselo a una hoja de cálculo o a otra herramienta: los de un usuario o, sin él,
+ * todos. Las páginas llevan sus enlaces en una columna («título <dirección> | …»).
+ */
+export async function filasParaExportar(bd: Bd, usuarioId: number | null): Promise<unknown[][]> {
+  const { rows } = await bd.query<Record<string, unknown>>(
+    `select e.nombre, e.tipo, e.titulo, e.destino, e.etiqueta, e.activo, e.caduca, u.correo as dueno, p.nombre as programa,
+            e.visitas_anteriores + coalesce((select sum(total) from visitas v where v.enlace_id = e.id), 0)::int as visitas,
+            e.problema_detalle as problema, e.creado, e.actualizado,
+            (select string_agg(x.titulo || ' <' || x.url || '>', ' | ' order by x.posicion) from elementos x where x.pagina_id = e.id) as enlaces_de_la_pagina
+     from enlaces e left join usuarios u on u.id = e.usuario_id left join programas p on p.id = e.programa_id
+     ${usuarioId === null ? '' : 'where e.usuario_id = $1'} order by e.id`, usuarioId === null ? [] : [usuarioId]);
+  const cab = ['nombre', 'enlace corto', 'tipo', 'título', 'destino', 'etiqueta', 'activo', 'caduca', 'dueño', 'programa', 'visitas', 'problema', 'creado', 'cambiado', 'enlaces de la página'];
+  return [cab, ...rows.map(r => [r.nombre, `${config.urlPublica}/${r.nombre}`, r.tipo, r.titulo, r.destino, r.etiqueta, r.activo ? 'sí' : 'no',
+    r.caduca, r.dueno, r.programa, r.visitas, r.problema, r.creado, r.actualizado, r.enlaces_de_la_pagina])];
+}
+
+/** Las visitas por enlace y día (las de antes de la app, que no tenían fecha, van aparte en la columna «visitas»). */
+export async function visitasParaExportar(bd: Bd, usuarioId: number | null): Promise<unknown[][]> {
+  const { rows } = await bd.query<{ nombre: string; dia: string; total: number }>(
+    `select e.nombre, v.dia, v.total from visitas v join enlaces e on e.id = v.enlace_id
+     ${usuarioId === null ? '' : 'where e.usuario_id = $1'} order by e.nombre, v.dia`, usuarioId === null ? [] : [usuarioId]);
+  return [['nombre', 'día', 'visitas'], ...rows.map(r => [r.nombre, r.dia, r.total])];
+}
+
+/**
+ * CSV que abre bien Excel en español (punto y coma, y la marca BOM para que respete las tildes) y cualquier otra
+ * hoja de cálculo. Lo que empieza por = + - @ va con un apóstrofo delante: si no, la hoja lo tomaría por una fórmula.
+ */
+export function aCsv(filas: unknown[][]): string {
+  const celda = (v: unknown) => {
+    let t = v === null || v === undefined ? '' : v instanceof Date ? v.toISOString() : String(v);
+    if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+    return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  return '\ufeff' + filas.map(f => f.map(celda).join(';')).join('\r\n') + '\r\n';
 }

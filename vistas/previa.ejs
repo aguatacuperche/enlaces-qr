@@ -1,0 +1,26 @@
+<%- include('parciales/cabeza', { titulo: 'Adónde lleva ' + corta(e.nombre) }) %>
+<main class="nf">
+  <div class="nf-marca"><img src="/marca/isotipo.svg" alt=""><%= centro.nombre %></div>
+  <div class="nf-caja previa">
+    <h1>Adónde lleva este enlace</h1>
+    <p><b><%= dominio %>/<wbr><%= e.nombre %></b> es un enlace de <%= centro.nombre %><% if (e.titulo) { %>: <%= e.titulo %><% } %>.</p>
+    <% if (e.tipo === 'pagina') { %>
+      <div class="previa-destino">
+        <small>Abre una página del centro con</small>
+        <b><%= e.elementos === 1 ? '1 enlace' : `${e.elementos} enlaces` %></b>
+      </div>
+      <a class="btn" href="/<%= encodeURIComponent(e.nombre) %>">Abrir la página</a>
+    <% } else { %>
+      <div class="previa-destino">
+        <small>Lleva a</small>
+        <b><%= new URL(e.destino).hostname.replace(/^www\./, '') %></b>
+        <span><%= e.destino %></span>
+      </div>
+      <a class="btn" href="<%= e.destino %>" rel="noopener noreferrer">Ir allí</a>
+    <% } %>
+    <p class="previa-nota">Creado el <%= fechaLarga(e.creado) %>. Si no es lo que esperabas, no lo abras y avisa al centro.</p>
+  </div>
+  <div class="nf-pie"><%= centro.pie %></div>
+</main>
+</body>
+</html>

@@ -8,7 +8,7 @@
     aviso.textContent = texto;
     aviso.classList.add('ver');
     clearTimeout(reloj);
-    reloj = setTimeout(() => aviso.classList.remove('ver'), 2000);
+    reloj = setTimeout(() => aviso.classList.remove('ver'), 4000);
   };
 
   document.addEventListener('click', async e => {
@@ -42,9 +42,17 @@
     dialogo.showModal();
   });
   // Pulsar fuera del diálogo es como cancelar.
-  dialogo?.addEventListener('click', e => { if (e.target === dialogo) dialogo.close('no'); });
+  if (dialogo) dialogo.addEventListener('click', e => { if (e.target === dialogo) dialogo.close('no'); });
 
-  for (const s of document.querySelectorAll('select[data-enviar]')) s.addEventListener('change', () => s.form.submit());
+  // Etiqueta y orden se aplican solos al elegir con el ratón o el dedo. Con el teclado, en Windows cada flecha cambia
+  // el valor: se aplica con Intro o al salir del campo, no a cada flecha.
+  for (const s of document.querySelectorAll('select[data-enviar]')) {
+    const inicial = s.value;
+    let teclado = false;
+    s.addEventListener('keydown', e => { teclado = true; if (e.key === 'Enter') s.form.submit(); });
+    s.addEventListener('change', () => { if (!teclado) s.form.submit(); });
+    s.addEventListener('blur', () => { if (teclado && s.value !== inicial) s.form.submit(); teclado = false; });
+  }
 
   // Nombre del enlace nuevo: ancho a la medida y aviso al momento si no vale o ya existe.
   const nombre = document.getElementById('nombre');
