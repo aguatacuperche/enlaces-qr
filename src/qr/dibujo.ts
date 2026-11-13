@@ -43,13 +43,22 @@ export function ladoDelLogo(version: number): number {
   return version <= 2 ? 5 : version <= 4 ? 7 : 9;
 }
 
+/**
+ * Desde la versión 7 (direcciones de más de unas 55 letras con corrección alta) hay un patrón de alineación justo en
+ * el centro, y el logo lo taparía entero: con él, los lectores fallan mucho más (zbar, en 15 a 19 de cada 72 casos). En
+ * esas versiones el QR sale sin logo.
+ */
+export const VERSION_SIN_LOGO = 7;
+export const versionDe = (url: string) => QRCode.create(url, { errorCorrectionLevel: 'H' }).version;
+export const admiteLogo = (url: string) => versionDe(url) < VERSION_SIN_LOGO;
+
 /** El color de acento no se usa para puntos ni esquinas: sobre blanco se lee mal. Solo va en el logo. */
 export function dibujarQR(url: string, o: Opciones, nombreEnlace: string): string {
   const { M, alineaciones } = codigo(url), n = M.length, media = (ladoDelLogo((n - 17) / 4) - 1) / 2;
   const c5 = cargarMarca().colores;
   const color = o.color === 'marca' ? c5.principal.valor : c5[o.color].valor;
   const ojos = o.color === 'marca' ? [c5.tercero.valor, c5.segundo.valor, c5.principal.valor] : [color, color, color];
-  const conLogo = o.centro === 'logo';
+  const conLogo = o.centro === 'logo' && (n - 17) / 4 < VERSION_SIN_LOGO;
   const marco = o.marco !== 'no';
   const B = 1.6, qz = marco ? 2.6 : 4;
   const W = n + 2 * qz + (marco ? 2 * B : 0), banda = marco ? 7 : 0, H = W + banda;

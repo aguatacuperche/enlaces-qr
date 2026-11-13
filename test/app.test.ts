@@ -407,6 +407,24 @@ describe('páginas con varios enlaces', () => {
     const muchos = Array.from({ length: 31 }, (_, i) => `https://colegio.example/${i}`);
     expect((await pedir(`/panel/enlaces/${id}`, { galleta: g, cuerpo: { titulo: 'Muchos', nombre: 'pagina-mal', elemento_titulo: muchos.map(() => 'x'), elemento_url: muchos } })).estado).toBe(422);
   });
+  it('un aviso de uno de sus enlaces se puede dar por bueno, y guardar la página no borra desde cuándo falla', async () => {
+    const g = await entrarComo('ana.perez@colegio.example');
+    const id = Number((await pedir('/panel/paginas', { galleta: g, cuerpo: {} })).destino!.match(/enlaces\/(\d+)/)![1]);
+    const datos = { titulo: 'Claustro', nombre: 'claustro', activo: 'si', elemento_titulo: ['Acta', 'Horario'], elemento_url: ['https://docs.example.com/acta', 'https://colegio.example/h'] };
+    await pedir(`/panel/enlaces/${id}`, { galleta: g, cuerpo: datos });
+    await bd.query(`update elementos set problema = 'pide-sesion', problema_detalle = 'Pide sesión.', problema_desde = '2026-01-05', comprobado = now()
+                    where pagina_id = $1 and titulo = 'Acta'`, [id]);
+    expect((await pedir('/panel?problemas=1', { galleta: g })).texto).toContain('Claustro');
+    // Guardar otra vez, cambiando solo el título: se conserva desde cuándo falla.
+    await pedir(`/panel/enlaces/${id}`, { galleta: g, cuerpo: { ...datos, titulo: 'Claustro de profesores' } });
+    const { rows: [x] } = await bd.query<{ id: number; problema_desde: Date }>("select id, problema_desde from elementos where pagina_id = $1 and titulo = 'Acta'", [id]);
+    expect(x.problema_desde.toISOString().slice(0, 10)).toBe('2026-01-05');
+    expect((await pedir(`/panel/enlaces/${id}/elementos/${x.id}/ignorar`, { galleta: g, cuerpo: {} })).estado).toBe(302);
+    expect((await pedir('/panel?problemas=1', { galleta: g })).texto).not.toContain('Claustro de profesores');
+    // Otro profesor no puede dar por bueno lo de una página que no es suya.
+    const marta = await entrarComo('marta.diaz@colegio.example');
+    expect((await pedir(`/panel/enlaces/${id}/elementos/${x.id}/ignorar`, { galleta: marta, cuerpo: {} })).estado).toBe(404);
+  });
 });
 
 describe('ayuda e impresión', () => {

@@ -4,7 +4,7 @@ import type { Bd } from './db.ts';
 import { exigirAdmin, exigirUsuario } from './entrada.ts';
 import {
   actualizarEnlace, actualizarPagina, borrarEnlace, cambiarActivo, cambiarDueno, crearEnlace, crearPagina, elementosDe,
-  enlacePorId, ErrorDeFormulario, etiquetas, ignorarAviso, limpiarNombre, listarEnlaces, MAX_ELEMENTOS, nombreAutomaticoLibre,
+  enlacePorId, ErrorDeFormulario, etiquetas, ignorarAviso, ignorarAvisoElemento, limpiarNombre, listarEnlaces, MAX_ELEMENTOS, nombreAutomaticoLibre,
   nombreLibre, recuento, seriesDiarias, seriesSemanales, type Enlace, type Estado, type Filtro,
 } from './enlaces.ts';
 import { comprobarEnlace } from './comprobador.ts';
@@ -14,10 +14,10 @@ import { problemaConNombre } from './nombres.ts';
 import { refrescarEnlace } from './redireccion.ts';
 import { cambiarAcceso, cambiarAdmin, cerrarAyuda, guardarPreferenciasQR, listarUsuarios, pasarEnlaces, type Usuario } from './usuarios.ts';
 import { urlCorta } from './config.ts';
-import { dibujarQR } from './qr/dibujo.ts';
+import { admiteLogo, dibujarQR } from './qr/dibujo.ts';
 import { pdf, png, seLee } from './qr/exportar.ts';
 import { aConsulta, leerOpciones, pixelesDe, POR_DEFECTO, TAMANOS, type Opciones } from './qr/opciones.ts';
-import { cartel, HOJAS, pegatinas, problemaConHoja, type Hoja } from './qr/impresion.ts';
+import { cartel, HOJAS, pegatinas, problemaConHoja, problemaConTamano, type Hoja } from './qr/impresion.ts';
 import type { Cartero } from './correo.ts';
 import { contexto, destinatarios, enviarUno, informeApagado, momento, proximoEnvio } from './informe.ts';
 import {
@@ -208,6 +208,13 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
     res.redirect(`/panel/enlaces/${e.id}`);
   });
 
+  r.post('/enlaces/:id/elementos/:elemento/ignorar', async (req, res) => {
+    const e = await enlaceDe(req, res);
+    if (!e) return;
+    await ignorarAvisoElemento(bd, e.id, Number(req.params.elemento) || 0);
+    res.redirect(`/panel/enlaces/${e.id}`);
+  });
+
   r.post('/enlaces/:id/borrar', async (req, res) => {
     const e = await enlaceDe(req, res);
     if (!e) return;
@@ -231,7 +238,10 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
   r.get('/enlaces/:id/qr', async (req, res) => {
     const e = await enlaceDe(req, res);
     if (!e) return;
-    res.render('qr', { e, o: opcionesDe(req, res), tamanos: TAMANOS, hojas: HOJAS, consulta: aConsulta, modo: texto(req.query.modo) || 'codigo' });
+    res.render('qr', {
+      e, o: opcionesDe(req, res), tamanos: TAMANOS, hojas: HOJAS, consulta: aConsulta, modo: texto(req.query.modo) || 'codigo',
+      admiteLogo: admiteLogo(urlCorta(e.nombre)),
+    });
   });
 
   r.get('/enlaces/:id/qr.:formato', async (req, res) => {
@@ -282,7 +292,10 @@ export function rutasDelPanel(bd: Bd, cartero: Cartero | null = null) {
     const porHoja = hoja.columnas * hoja.filas;
     const empezar = entero(req.query.empezar, 1, porHoja, 1);
     const textoPegatina = (['titulo', 'direccion', 'nada'] as const).find(t => t === req.query.pegatina_texto) ?? 'titulo';
-    const pdfPegatinas = await pegatinas(dibujarQR(urlCorta(e.nombre), o, e.nombre), res.app.locals.corta(e.nombre), e.titulo, {
+    const svg = dibujarQR(urlCorta(e.nombre), o, e.nombre);
+    const pequeno = problemaConTamano(hoja, textoPegatina, Number(svg.match(/viewBox="0 0 ([\d.]+)/)![1]));
+    if (pequeno) return res.status(422).type('html').send(`<p style="font:16px sans-serif;padding:1em;color:#5a1219">${pequeno}</p>`);
+    const pdfPegatinas = await pegatinas(svg, res.app.locals.corta(e.nombre), e.titulo, {
       hoja, empezar, cuantas: entero(req.query.cuantas, 1, 400, porHoja - empezar + 1), texto: textoPegatina, bordes: req.query.bordes === 'si',
     });
     if (req.query.descargar === '1') {

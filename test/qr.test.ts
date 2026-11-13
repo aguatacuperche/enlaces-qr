@@ -5,6 +5,19 @@ import { leerOpciones, POR_DEFECTO, type Opciones } from '../src/qr/opciones.ts'
 
 const URL = 'https://enlaces.example/excursion-museo';
 
+describe('el logo y las direcciones largas', () => {
+  it('desde la versión 7 el QR sale sin logo, para no tapar el patrón del centro', async () => {
+    const { admiteLogo } = await import('../src/qr/dibujo.ts');
+    const larga = 'https://enlaces.ayuntamiento-de-ejemplo.example/inscripciones-campamento-de-verano';
+    expect(admiteLogo('https://enlaces.example/MKQT')).toBe(true);
+    expect(admiteLogo(larga)).toBe(false);
+    const { dibujarQR: dibujar } = await import('../src/qr/dibujo.ts');
+    const { POR_DEFECTO: base } = await import('../src/qr/opciones.ts');
+    expect(dibujar(larga, { ...base, centro: 'logo' }, 'x').match(/<svg/g)?.length).toBe(1);
+    expect(dibujar('https://enlaces.example/MKQT', { ...base, centro: 'logo' }, 'x').match(/<svg/g)!.length).toBeGreaterThan(1);
+  });
+});
+
 describe('creador de QR', () => {
   // Dibuja y lee 240 QR: con la máquina ocupada pasa del minuto.
   it('todas las combinaciones de opciones se leen', { timeout: 240_000 }, () => {

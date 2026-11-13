@@ -44,7 +44,7 @@ export async function listarUsuarios(bd: Bd): Promise<UsuarioConEnlaces[]> {
             (select count(*)::int from enlaces e where e.usuario_id = u.id) as enlaces,
             (select count(*)::int from enlaces e where e.usuario_id = u.id and e.activo
                and ((e.problema is not null and not e.aviso_ignorado)
-                    or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null))) as con_problemas,
+                    or exists (select 1 from elementos x where x.pagina_id = e.id and x.problema is not null and not x.aviso_ignorado))) as con_problemas,
             (select max(enviado) from informes i where i.usuario_id = u.id) as ultimo_informe
      from usuarios u order by lower(u.nombre)`)).rows;
 }

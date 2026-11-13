@@ -31,7 +31,7 @@
           <% if (!e.elementos) { %>
             <p>Todavía no tiene enlaces.</p>
           <% } else if (e.elementos_mal) { %>
-            <p class="roto"><svg class="i"><use href="#i-aviso"/></svg><b><%= e.elementos_mal === 1 ? '1 de sus enlaces no abre' : `${e.elementos_mal} de sus enlaces no abren` %>.</b> Lo tienes marcado en la lista.</p>
+            <p class="roto"><svg class="i"><use href="#i-aviso"/></svg><b><%= e.elementos_mal === 1 ? '1 de sus enlaces necesita revisión' : `${e.elementos_mal} de sus enlaces necesitan revisión` %>.</b> Lo tienes marcado en la lista.</p>
           <% } else if (e.comprobado) { %>
             <p class="bien"><svg class="i"><use href="#i-ok"/></svg>Sus enlaces abren bien · comprobado el <%= fechaCorta(e.comprobado) %>.</p>
           <% } else { %>
@@ -81,7 +81,12 @@
                   <div class="elemento-campos">
                     <input name="elemento_titulo" value="<%= x.titulo %>" maxlength="120" placeholder="Título (por ejemplo: Horario)" aria-label="Título del enlace">
                     <input name="elemento_url" type="url" value="<%= x.url %>" placeholder="https://…" aria-label="Dirección del enlace">
-                    <% if (x.problema) { %><small class="chip-problema <%= esAviso(x.problema) ? 'aviso' : 'roto' %>" title="<%= x.problema_detalle %>"><svg class="i"><use href="#i-aviso"/></svg><%= x.problema_detalle %></small><% } %>
+                    <% if (x.problema && x.aviso_ignorado) { %>
+                      <small class="chip-gris" title="<%= x.problema_detalle %>">Dado por bueno: <%= x.problema_detalle %></small>
+                    <% } else if (x.problema) { %>
+                      <small class="chip-problema <%= esAviso(x.problema) ? 'aviso' : 'roto' %>" title="<%= x.problema_detalle %>"><svg class="i"><use href="#i-aviso"/></svg><%= x.problema_detalle %></small>
+                      <% if (esAviso(x.problema) && x.id) { %><button class="btn suave peq" formaction="/panel/enlaces/<%= e.id %>/elementos/<%= x.id %>/ignorar" formnovalidate>Dar por bueno</button><% } %>
+                    <% } %>
                   </div>
                   <div class="elemento-botones">
                     <button type="button" class="ic" data-mover="-1" title="Subir" aria-label="Subir"><svg class="i"><use href="#i-arriba"/></svg></button>

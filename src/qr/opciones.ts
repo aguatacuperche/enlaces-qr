@@ -42,7 +42,8 @@ export function leerOpciones(entrada: Record<string, unknown>, base: Opciones = 
     const v = entrada[k];
     if (typeof v === 'string' && (VALORES[k] as readonly string[]).includes(v)) (o as Record<string, string>)[k] = v;
   }
-  if (typeof entrada.texto === 'string') o.texto = entrada.texto.replace(/\s+/g, ' ').trim().slice(0, LARGO_TEXTO);
+  // Por letras, no por unidades de JavaScript: cortar a mitad de un emoji dejaría medio carácter.
+  if (typeof entrada.texto === 'string') o.texto = Array.from(entrada.texto.replace(/\s+/g, ' ').trim()).slice(0, LARGO_TEXTO).join('');
   return o;
 }
 

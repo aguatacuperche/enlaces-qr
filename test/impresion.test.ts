@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cartel, HOJAS, ladoQrPegatina, pegatinas, posiciones, problemaConHoja, type Hoja } from '../src/qr/impresion.ts';
+import { cartel, HOJAS, ladoQrPegatina, pegatinas, posiciones, problemaConHoja, problemaConTamano, type Hoja } from '../src/qr/impresion.ts';
 import { dibujarQR } from '../src/qr/dibujo.ts';
 import { POR_DEFECTO } from '../src/qr/opciones.ts';
 
@@ -12,6 +12,20 @@ describe('hojas de pegatinas', () => {
       expect(problemaConHoja(h), clave).toBeNull();
       expect(ladoQrPegatina(h, 'titulo'), clave).toBeGreaterThanOrEqual(18);
     }
+  });
+
+  it('avisa si el QR saldría con módulos de menos de 0,3 mm, y los formatos habituales no lo hacen', () => {
+    const modulos = Number(svg.match(/viewBox="0 0 ([\d.]+)/)![1]);
+    for (const [clave, h] of Object.entries(HOJAS)) expect(problemaConTamano(h, 'titulo', modulos), clave).toBeNull();
+    const diminuta: Hoja = { ...HOJAS['21-70x42'], nombre: 'A medida', ancho: 15, alto: 15, columnas: 13, filas: 19 };
+    expect(problemaConTamano(diminuta, 'direccion', modulos)).toMatch(/no lo leerían/);
+  });
+
+  it('con un dominio largo y letras de otros alfabetos, las pegatinas salen igual', async () => {
+    const largo = 'enlaces.ayuntamiento-de-ejemplo.example/inscripciones-verano';
+    const pdf = await pegatinas(dibujarQR('https://' + largo, { ...POR_DEFECTO, marco: 'no' }, 'x'), largo, 'Łódź · Пример · 🎉',
+      { hoja: HOJAS['40-52x29'], empezar: 1, cuantas: 40, texto: 'titulo', bordes: true });
+    expect(paginas(pdf)).toBe(1);
   });
 
   it('rechaza las medidas a medida que no caben o no tienen sentido', () => {
