@@ -1,6 +1,7 @@
 /**
  * API para que otros programas creen enlaces cortos, compatible con la de YOURLS: POST /yourls-api.php con
- * `action=shorturl` (o `update`, como el complemento «edit url» de YOURLS), `signature=<llave>` y `format=json`.
+ * `action=shorturl` (o `update`, como el complemento «edit url» de YOURLS, `expand` o `url-stats`), `signature=<llave>`
+ * y `format=json`.
  *
  * Cada programa tiene su llave (la crea un administrador en el panel), solo puede crear enlaces hacia sus dominios y
  * tiene un tope de peticiones por minuto. Sus enlaces salen a su nombre en el panel, donde se pueden pausar o pasar a
@@ -142,6 +143,23 @@ async function expandir(bd: Bd, p: ProgramaActivo, shorturl: string): Promise<Re
   };
 }
 
+/**
+ * Como «url-stats» de YOURLS: las visitas de un enlace del programa (las que se cuentan en el panel: personas, no
+ * robots ni vistas previas). Sin `ip`, que aquí no se guarda; `active` y `clicks_month` (30 días) no los trae YOURLS.
+ */
+async function estadisticas(bd: Bd, p: ProgramaActivo, shorturl: string): Promise<Respuesta> {
+  if (!shorturl) return { ...fallo(400, 'error:missing', 'error: missing param'), simple: 'Falta shorturl.' };
+  const e = await enlaceDelPrograma(bd, p.id, nombreDe(shorturl));
+  if (!e) return { ...fallo(404, 'error:notfound', 'Error: short URL not found'), simple: `${shorturl} no existe o no es de este programa.` };
+  return {
+    message: 'success', statusCode: 200, simple: String(e.visitas),
+    link: {
+      shorturl: urlCorta(e.nombre), url: e.destino, title: e.titulo, timestamp: fecha(e.creado),
+      clicks: e.visitas, clicks_month: e.visitas_mes, active: estadoDe(e) === 'activo',
+    },
+  };
+}
+
 export function rutasDeLaApi(bd: Bd) {
   const r = express.Router();
   r.all('/yourls-api.php', async (req, res) => {
@@ -178,9 +196,13 @@ export function rutasDeLaApi(bd: Bd) {
       const o = await expandir(bd, p, campo(req, 'shorturl'));
       return responder(o, String(o.simple));
     }
+    if (accion === 'url-stats') {
+      const o = await estadisticas(bd, p, campo(req, 'shorturl'));
+      return responder(o, String(o.simple));
+    }
     // Hay clientes que prueban la conexión pidiendo la versión.
     if (accion === 'version') return responder({ version: '1.9.2', message: 'enlaces-qr, compatible con la API de YOURLS', statusCode: 200 }, '1.9.2');
-    responderFallo(fallo(400, 'error:action', 'Acción desconocida: usa shorturl, update, expand o version.'));
+    responderFallo(fallo(400, 'error:action', 'Acción desconocida: usa shorturl, update, expand, url-stats o version.'));
   });
   return r;
 }

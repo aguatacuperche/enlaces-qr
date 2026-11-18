@@ -139,6 +139,33 @@ describe('redirección', () => {
     expect(caducado.texto).toContain('1 de enero de 2020');
   });
 
+  it('pasa al destino las campañas de la dirección corta si no trae las suyas, y nada más de la consulta', async () => {
+    await bd.query(`insert into enlaces (nombre, destino, titulo, usuario_id) values
+      ('jornada', 'https://forms.example.com/jornada?d=web#plazas', 'Jornada', $1),
+      ('jornada-ig', 'https://forms.example.com/jornada?d=ig&utm_source=instagram#plazas', 'Jornada', $1)`, [ids.ana]);
+    await recargar(bd);
+    expect((await pedir('/jornada?utm_source=chatgpt.com&utm_medium=ia&otra=1&utm_source_platform=x')).destino)
+      .toBe('https://forms.example.com/jornada?d=web&utm_source=chatgpt.com&utm_medium=ia&utm_source_platform=x#plazas');
+    expect((await pedir('/Qx7b?utm_campaign=acto-7')).destino).toBe('https://maps.example.com/visita?utm_campaign=acto-7');
+    // Las que puso quien hizo el enlace mandan.
+    expect((await pedir('/jornada-ig?utm_source=chatgpt.com')).destino).toBe('https://forms.example.com/jornada?d=ig&utm_source=instagram#plazas');
+    // Sin campañas, el destino tal cual; repetidas, demasiado largas o con otro nombre, no pasan.
+    expect((await pedir('/jornada?otra=1&UTM_SOURCE=x')).destino).toBe('https://forms.example.com/jornada?d=web#plazas');
+    expect((await pedir('/jornada?utm_source=a&utm_source=b')).destino).toBe('https://forms.example.com/jornada?d=web#plazas');
+    expect((await pedir(`/jornada?utm_term=${'x'.repeat(201)}`)).destino).toBe('https://forms.example.com/jornada?d=web#plazas');
+    // Lo que llega va codificado: ni rompe la dirección ni mete cabeceras.
+    expect((await pedir('/jornada?utm_campaign=a%20b%26c%0d%0aSet-Cookie:%20x')).destino)
+      .toBe('https://forms.example.com/jornada?d=web&utm_campaign=a+b%26c%0D%0ASet-Cookie%3A+x#plazas');
+  });
+
+  it('la redirección deja saber al destino de qué web llega la visita; el resto de la app, no', async () => {
+    const politica = async (ruta: string) => (await fetch(BASE + ruta, { redirect: 'manual', headers: { 'user-agent': NAVEGADOR } })).headers.get('referrer-policy');
+    expect(await politica('/excursion-museo')).toBe('strict-origin-when-cross-origin');
+    expect(await politica('/excursion-museo+')).toBe('same-origin');
+    expect(await politica('/excursion-mueso')).toBe('same-origin');
+    expect(await politica('/entrar')).toBe('same-origin');
+  });
+
   it('cuenta las visitas de personas, no las de robots ni las vistas previas', async () => {
     const antes = await visitas(ids.museo);
     await pedir('/excursion-museo');

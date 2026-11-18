@@ -16,7 +16,7 @@ import { iniciarComprobaciones } from './comprobador.ts';
 import { crearCartero, type Cartero } from './correo.ts';
 import { contexto, iniciarInformes } from './informe.ts';
 import { elementosDe, enlacePorId } from './enlaces.ts';
-import { contarVisita, cuentaComoVisita, recargar, resolver, volcarVisitas } from './redireccion.ts';
+import { conCampanas, contarVisita, cuentaComoVisita, recargar, resolver, volcarVisitas } from './redireccion.ts';
 import { dibujarQR } from './qr/dibujo.ts';
 import { pngAparte } from './qr/exportar.ts';
 import { aConsulta, leerOpciones, POR_DEFECTO } from './qr/opciones.ts';
@@ -157,7 +157,12 @@ export function crearApp(bd: Bd, cartero: Cartero | null = crearCartero(process.
     if (cuentaComoVisita(req.method, req.get('user-agent'))) {
       contarVisita(r.id);
     }
-    if (r.tipo === 'ir') return res.set('Cache-Control', 'private, no-store').redirect(302, r.destino);
+    if (r.tipo === 'ir') {
+      // Con «same-origin», la del resto de la app, el destino no sabría de dónde llega la visita. Así le llega el dominio
+      // de la página donde estaba el enlace (nunca la dirección entera), como hacen los navegadores por defecto.
+      return res.set({ 'Cache-Control': 'private, no-store', 'Referrer-Policy': 'strict-origin-when-cross-origin' })
+        .redirect(302, conCampanas(r.destino, req.query));
+    }
     // Una página con varios enlaces: se enseña aquí mismo.
     const pagina = await enlacePorId(bd, r.id);
     if (!pagina) return noEncontrado(res, { tipo: 'no-existe', nombre: req.params.nombre as string, parecido: null });
