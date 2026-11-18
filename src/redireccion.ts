@@ -78,6 +78,31 @@ function sugerencia(nombre: string): string | null {
   return parecido(nombre, candidatos);
 }
 
+/** Campañas (utm_source, utm_medium, utm_campaign…): las que se pasan de la dirección corta al destino. */
+const CAMPANA = /^utm_[a-z_]{2,30}$/;
+const MAX_CAMPANAS = 10, LARGO_CAMPANA = 200;
+
+/**
+ * <dominio>/<nombre>?utm_source=… lleva al destino con esas campañas, para que el destino sepa de dónde llega la visita
+ * (algunos asistentes añaden utm_source a los enlaces que citan). Solo si el destino no trae ninguna: las que puso
+ * quien hizo el enlace mandan. Lo demás de la consulta no pasa, y el resto del destino queda tal como se guardó.
+ */
+export function conCampanas(destino: string, consulta: Record<string, unknown>): string {
+  const pasar: [string, string][] = [];
+  for (const [k, v] of Object.entries(consulta)) {
+    if (pasar.length >= MAX_CAMPANAS) break;
+    // Repetida llega como lista: se deja fuera, no hay forma de saber cuál vale.
+    if (CAMPANA.test(k) && typeof v === 'string' && v && v.length <= LARGO_CAMPANA) pasar.push([k, v]);
+  }
+  if (!pasar.length || !URL.canParse(destino)) return destino;
+  if ([...new URL(destino).searchParams.keys()].some(k => k.toLowerCase().startsWith('utm_'))) return destino;
+  // Antes del fragmento (#…), que el navegador no manda al servidor.
+  const hash = destino.indexOf('#');
+  const sin = hash < 0 ? destino : destino.slice(0, hash), fragmento = hash < 0 ? '' : destino.slice(hash);
+  const union = !sin.includes('?') ? '?' : /[?&]$/.test(sin) ? '' : '&';
+  return sin + union + new URLSearchParams(pasar).toString() + fragmento;
+}
+
 /** Lo que no es una persona: buscadores y las vistas previas de WhatsApp, Telegram, etc. No cuentan como visita. */
 const ROBOT = /bot|crawl|spider|preview|facebookexternalhit|whatsapp|telegram|slack|discord|curl|wget|python|headless/i;
 

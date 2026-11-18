@@ -13,6 +13,10 @@ abrirlo.
 - **Redirige** `<dominio>/<nombre>` a su destino, sin distinguir mayúsculas y con redirección temporal (302), para que
   cambiar el destino valga al momento. Si el enlace no existe, está en pausa o ha caducado, enseña una página del
   centro que lo explica (404 o 410) y, si parece una errata, propone el enlace parecido.
+- **De dónde llega cada visita**: las campañas de la dirección corta (`<dominio>/<nombre>?utm_source=…`, solo los
+  `utm_*`) pasan al destino si el destino no trae ninguna; las que puso quien hizo el enlace mandan, y lo demás de la
+  consulta no pasa. La redirección lleva `Referrer-Policy: strict-origin-when-cross-origin`: el destino sabe el dominio
+  de la página donde estaba el enlace, nunca la dirección entera (por un QR no llega nada).
 - **Entrada solo con Google** (Google Workspace), con cuentas del dominio del centro, y sin contraseñas propias. Se
   puede dejar fuera una parte de las cuentas con un patrón (por ejemplo, las de los alumnos si sus correos llevan
   cifras). Cada persona se da de alta sola la primera vez que entra; un administrador le puede quitar el acceso.
@@ -99,8 +103,8 @@ url» para cambiar el destino (`action=update`). Vale un cliente de YOURLS que:
 - mande la llave en `signature` (no admite la firma con `timestamp` ni usuario y contraseña);
 - pida `format=json` o `format=simple` (no `xml` ni `jsonp`; sin `format`, JSON).
 
-Acciones: `shorturl`, `update`, `expand` (solo con los enlaces del propio programa) y `version` (para probar la
-conexión). `url-stats`, `stats` y `db-stats` no están.
+Acciones: `shorturl`, `update`, `expand` y `url-stats` (estas dos, solo con los enlaces del propio programa) y
+`version` (para probar la conexión). `stats` y `db-stats` no están.
 
 1. Un administrador entra en **Programas**, crea el programa (su nombre, los dominios hacia los que podrá crear
    enlaces y un tope de peticiones por minuto) y copia la llave. Solo se enseña esa vez. Si se pierde, «Sacar una
@@ -145,6 +149,25 @@ Contesta `"message":"success: updated"` (200) y `"active"`: `false` si el enlace
 se guarda, pero no abre hasta que alguien lo active). Si no existe, `"error: not found"` (404); si existe pero ya no es
 del programa (un administrador se lo pasó a una persona), `"code":"error:notyours"` (403): el programa no debe darlo por
 cambiado. `shorturl` puede ser el nombre o el enlace corto entero.
+
+Las visitas de un enlace del programa, como `url-stats` de YOURLS:
+
+```sh
+curl -s https://enlaces.colegio.example/yourls-api.php \
+  -d action=url-stats -d format=json -d signature="$LLAVE" -d shorturl=MKQT
+```
+
+```json
+{"message":"success","statusCode":200,
+ "link":{"shorturl":"https://enlaces.colegio.example/MKQT","url":"https://aula.colegio.example/menu.php?t=abc",
+ "title":"Monitores · Turno 1","timestamp":"2026-11-07 10:30:00","clicks":42,"clicks_month":12,"active":true}}
+```
+
+`clicks` son las visitas de siempre, las mismas del panel: personas, no robots ni vistas previas, y no personas
+distintas. `clicks_month`, las de los últimos 30 días, y `active`, si abre, no los trae YOURLS; tampoco va `ip`, que
+aquí no se guarda. Las visitas se guardan cada pocos segundos, y cada consulta gasta del tope por minuto: mejor
+pedirlas de vez en cuando (una vez al día, o al abrir la pantalla que las enseña) que con cada visita. Con
+`format=simple`, solo el número. Si no existe o no es del programa, `"Error: short URL not found"` (404).
 
 Además:
 

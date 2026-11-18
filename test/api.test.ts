@@ -17,7 +17,7 @@ process.env.DATABASE_URL = process.env.DATABASE_URL_PRUEBAS ?? 'postgres://enlac
 
 const { conectar, migrar } = await import('../src/db.ts');
 const { crearApp } = await import('../src/servidor.ts');
-const { recargar } = await import('../src/redireccion.ts');
+const { recargar, volcarVisitas } = await import('../src/redireccion.ts');
 const { destinatarios } = await import('../src/informe.ts');
 
 const bd = conectar(process.env.DATABASE_URL);
@@ -297,6 +297,32 @@ describe('los enlaces de un programa en el panel', () => {
     const parado = await pedir('/yourls-api.php', { cuerpo: { format: 'json', action: 'version', signature: lento.llave }, origen: null });
     // Salvo que justo cambie el minuto entre las dos.
     if (parado.estado === 429) expect(Number(parado.reintentar)).toBeGreaterThan(0);
+  });
+
+  it('da las visitas de sus enlaces (url-stats, como YOURLS), no las de los demás', async () => {
+    // Un programa aparte: estas consultas no gastan del tope del otro.
+    const carteles = await nuevoPrograma('Carteles', 'aula.colegio.example');
+    const r = await api({ action: 'shorturl', url: 'https://aula.colegio.example/acto?d=cartel', title: 'Cartel', signature: carteles.llave });
+    const nombre = r.json.url.keyword;
+    const stats = async () => (await api({ action: 'url-stats', shorturl: r.json.shorturl, signature: carteles.llave })).json;
+    expect(await stats()).toMatchObject({
+      message: 'success', statusCode: 200,
+      link: { shorturl: r.json.shorturl, url: 'https://aula.colegio.example/acto?d=cartel', title: 'Cartel', clicks: 0, clicks_month: 0, active: true },
+    });
+    expect((await stats()).link.timestamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    // Cuentan las personas, como en el panel: ni HEAD ni robots.
+    await pedir('/' + nombre);
+    await pedir('/' + nombre.toLowerCase());
+    await pedir('/' + nombre, { metodo: 'HEAD' });
+    await volcarVisitas(bd);
+    expect((await stats()).link).toMatchObject({ clicks: 2, clicks_month: 2 });
+    expect((await api({ action: 'url-stats', shorturl: nombre, format: 'simple', signature: carteles.llave })).texto).toBe('2');
+    // Los de una persona o de otro programa no son cosa suya.
+    const ajeno = await api({ action: 'url-stats', shorturl: 'excursion-museo', signature: carteles.llave });
+    expect(ajeno.estado).toBe(404);
+    expect(ajeno.json.message).toBe('Error: short URL not found');
+    expect((await api({ action: 'url-stats', shorturl: nombre, signature: comedor.llave })).estado).toBe(404);
+    expect((await api({ action: 'url-stats', signature: carteles.llave })).estado).toBe(400);
   });
 
   it('rechaza destinos demasiado largos o con caracteres invisibles', async () => {
